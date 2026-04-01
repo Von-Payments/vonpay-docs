@@ -1,0 +1,26 @@
+/* Von Payments brand colors */
+:root {
+  --ifm-color-primary: #2A58A8;
+  --ifm-color-primary-dark: #1E4280;
+  --ifm-color-primary-darker: #1A3A70;
+  --ifm-color-primary-darkest: #142D5A;
+  --ifm-color-primary-light: #3A6FBF;
+  --ifm-color-primary-lighter: #4A7FC9;
+  --ifm-color-primary-lightest: #6A9AD6;
+  --ifm-code-font-size: 95%;
+  --ifm-font-family-base: 'Lato', system-ui, -apple-system, sans-serif;
+  --docusaurus-highlighted-code-line-bg: rgba(42, 88, 168, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #6A9AD6;
+  --ifm-color-primary-dark: #4A7FC9;
+  --ifm-color-primary-darker: #3A6FBF;
+  --ifm-color-primary-darkest: #2A58A8;
+  --ifm-color-primary-light: #8AB0E0;
+  --ifm-color-primary-lighter: #A0C0E8;
+  --ifm-color-primary-lightest: #C0D8F0;
+  --docusaurus-highlighted-code-line-bg: rgba(42, 88, 168, 0.3);
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap');

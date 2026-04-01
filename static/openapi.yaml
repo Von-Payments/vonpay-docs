@@ -1,0 +1,543 @@
+openapi: 3.1.0
+info:
+  title: Von Pay Checkout API
+  description: |
+    API for Von Payments hosted checkout page. Merchants create checkout sessions
+    and redirect buyers to the hosted payment page. The API handles session
+    lifecycle, Gr4vy payment orchestration, and webhook processing.
+  version: 0.1.0
+  contact:
+    name: Von Payments
+    url: https://vonpayments.com
+
+servers:
+  - url: https://checkout.vonpayments.com
+    description: Production
+  - url: http://localhost:3001
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+paths:
+  /v1/sessions:
+    post:
+      operationId: createSession
+      summary: Create a checkout session
+      description: |
+        Creates a checkout session and returns a checkout URL. The merchant
+        redirects the buyer to this URL to complete payment.
+
+        Sessions expire after 30 minutes.
+      tags:
+        - Sessions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Unique key to ensure idempotent session creation
+          schema:
+            type: string
+            maxLength: 255
+            example: "order_123_attempt_1"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+            examples:
+              basic:
+                summary: Basic payment
+                value:
+                  merchantId: default
+                  amount: 1499
+                  currency: USD
+                  country: US
+                  successUrl: https://mystore.com/confirm
+              withItems:
+                summary: With line items and buyer info
+                value:
+                  merchantId: default
+                  amount: 2298
+                  currency: USD
+                  country: US
+                  successUrl: https://mystore.com/order/123/confirm
+                  cancelUrl: https://mystore.com/cart
+                  buyerId: cust_123
+                  buyerName: Jane Doe
+                  buyerEmail: jane@example.com
+                  lineItems:
+                    - name: Premium Widget
+                      quantity: 1
+                      unitAmount: 1499
+                    - name: Shipping
+                      quantity: 1
+                      unitAmount: 799
+                  metadata:
+                    orderId: order_123
+      responses:
+        "201":
+          description: Session created
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutSession"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/sessions/{sessionId}:
+    get:
+      operationId: getSession
+      summary: Get session status
+      description: Returns the current status and details of a checkout session.
+      tags:
+        - Sessions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: vp_cs_live_k7x9m2n4p3
+      responses:
+        "200":
+          description: Session found
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/checkout/init:
+    post:
+      operationId: initCheckout
+      summary: Initialize Gr4vy embed (internal)
+      description: |
+        Called by the hosted checkout page to initialize the Gr4vy payment embed.
+        Validates the session, moves it to "processing", and returns a Gr4vy token.
+
+        **Internal use only** — not intended for merchant integration.
+      tags:
+        - Checkout (Internal)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sessionId
+              properties:
+                sessionId:
+                  type: string
+                  example: vp_cs_live_k7x9m2n4p3
+      responses:
+        "200":
+          description: Checkout initialized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: Gr4vy embed token
+                  gr4vyId:
+                    type: string
+                    description: Gr4vy instance ID
+                  environment:
+                    type: string
+                    enum: [sandbox, production]
+                  checkoutSessionId:
+                    type: string
+                    description: Gr4vy checkout session ID
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session is not in a valid state for initialization
+        "410":
+          description: Session has expired
+
+  /api/checkout/complete:
+    post:
+      operationId: completeCheckout
+      summary: Complete checkout (internal)
+      description: |
+        Called by the hosted checkout page after the Gr4vy embed reports a
+        successful transaction. Updates session status and returns a signed
+        redirect URL.
+
+        **Internal use only** — not intended for merchant integration.
+      tags:
+        - Checkout (Internal)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sessionId
+                - transactionId
+              properties:
+                sessionId:
+                  type: string
+                transactionId:
+                  type: string
+      responses:
+        "200":
+          description: Checkout completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: succeeded
+                  sessionId:
+                    type: string
+                  transactionId:
+                    type: string
+                  redirectUrl:
+                    type: string
+                    nullable: true
+                    description: Signed redirect URL for the merchant
+
+  /api/webhooks/gr4vy:
+    post:
+      operationId: receiveWebhook
+      summary: Receive Gr4vy webhook
+      description: |
+        Endpoint for Gr4vy to send webhook events (transaction updates, etc.).
+        Persists the event and reconciles with checkout sessions asynchronously.
+
+        Configure this URL in your Gr4vy dashboard under Webhooks.
+      tags:
+        - Webhooks
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: Gr4vy event ID
+                type:
+                  type: string
+                  description: Event type (e.g. transaction.captured)
+                data:
+                  type: object
+                  description: Event payload
+      responses:
+        "200":
+          description: Webhook received
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+
+  /api/health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: Returns the health status of the checkout service and its dependencies.
+      tags:
+        - Operations
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: Service is degraded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        API key authentication. Pass your API key as a Bearer token.
+
+        ```
+        Authorization: Bearer vp_key_live_xxx
+        ```
+
+  headers:
+    X-Request-Id:
+      schema:
+        type: string
+      description: Unique request ID for tracing and debugging
+
+  schemas:
+    CreateSessionRequest:
+      type: object
+      required:
+        - merchantId
+        - amount
+        - currency
+        - country
+      properties:
+        merchantId:
+          type: string
+          description: Merchant account ID
+          maxLength: 100
+          example: default
+        amount:
+          type: integer
+          description: Amount in minor units (cents)
+          minimum: 1
+          maximum: 99999999
+          example: 1499
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          minLength: 3
+          maxLength: 3
+          example: USD
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2 country code
+          minLength: 2
+          maxLength: 2
+          example: US
+        mode:
+          type: string
+          description: Session mode
+          enum:
+            - payment
+          default: payment
+        successUrl:
+          type: string
+          format: uri
+          description: Redirect URL after successful payment (HTTPS required)
+          maxLength: 2048
+          example: https://mystore.com/order/123/confirm
+        cancelUrl:
+          type: string
+          format: uri
+          description: Redirect URL when buyer cancels (HTTPS required)
+          maxLength: 2048
+          example: https://mystore.com/cart
+        description:
+          type: string
+          description: Human-readable description of the payment
+          maxLength: 500
+        locale:
+          type: string
+          description: Locale for the checkout page (e.g. en-US)
+          maxLength: 10
+        expiresIn:
+          type: integer
+          description: Session TTL in seconds, default 1800
+          minimum: 300
+          maximum: 3600
+        buyerId:
+          type: string
+          description: Merchant's external buyer/customer ID
+          maxLength: 200
+        buyerName:
+          type: string
+          description: Buyer's full name (encrypted at rest)
+          maxLength: 200
+        buyerEmail:
+          type: string
+          format: email
+          description: Buyer's email address (encrypted at rest)
+          maxLength: 254
+        lineItems:
+          type: array
+          description: Order line items to display on the checkout page
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/LineItem"
+        metadata:
+          type: object
+          description: Arbitrary key-value metadata (passed through to webhooks)
+          additionalProperties:
+            type: string
+            maxLength: 500
+
+    LineItem:
+      type: object
+      required:
+        - name
+        - quantity
+        - unitAmount
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          example: Premium Widget
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 9999
+          example: 1
+        unitAmount:
+          type: integer
+          minimum: 0
+          description: Unit price in minor units (cents)
+          example: 1499
+        imageUrl:
+          type: string
+          format: uri
+          maxLength: 2048
+
+    CheckoutSession:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Session ID (prefixed, e.g. vp_cs_live_xxx)
+          example: vp_cs_live_k7x9m2n4p3
+        checkoutUrl:
+          type: string
+          format: uri
+          description: URL to redirect the buyer to
+          example: https://checkout.vonpayments.com/checkout?session=vp_cs_live_k7x9m2n4p3
+        expiresAt:
+          type: string
+          format: date-time
+          description: Session expiry time (30 minutes from creation)
+
+    SessionStatus:
+      type: object
+      properties:
+        id:
+          type: string
+          example: vp_cs_live_k7x9m2n4p3
+        status:
+          type: string
+          enum:
+            - pending
+            - processing
+            - succeeded
+            - failed
+            - expired
+        merchantId:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+        mode:
+          type: string
+          enum:
+            - payment
+        description:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        transactionId:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [ok, error, skipped]
+        latencyMs:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Invalid or missing API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
