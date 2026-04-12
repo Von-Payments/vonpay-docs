@@ -29,7 +29,7 @@ Production requires HTTPS for all URLs:
 
 - `successUrl` must be `https://...`
 - `cancelUrl` must be `https://...`
-- API calls must go to `https://checkout.vonpayments.com`
+- API calls must go to `https://checkout.vonpay.com`
 
 ### 3. Environment Variables
 
@@ -74,7 +74,7 @@ Make a small real payment ($1.00) to verify:
 Set up uptime monitoring on:
 
 ```
-GET https://checkout.vonpayments.com/api/health
+GET https://checkout.vonpay.com/api/health
 ```
 
 Returns `200` when healthy, `503` when degraded.

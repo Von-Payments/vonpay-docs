@@ -23,7 +23,7 @@ const vonpay = new VonPay("vp_key_live_xxx");
 // With options
 const vonpay = new VonPay({
   apiKey: "vp_key_live_xxx",
-  baseUrl: "https://checkout.vonpayments.com", // default
+  baseUrl: "https://checkout.vonpay.com", // default
 });
 ```
 
@@ -44,7 +44,7 @@ const session = await vonpay.sessions.create({
 });
 
 // session.id          => "vp_cs_live_k7x9m2n4p3"
-// session.checkoutUrl => "https://checkout.vonpayments.com/checkout?session=..."
+// session.checkoutUrl => "https://checkout.vonpay.com/checkout?session=..."
 // session.expiresAt   => "2026-03-31T15:30:00.000Z"
 ```
 

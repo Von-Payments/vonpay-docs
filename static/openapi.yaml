@@ -4,14 +4,14 @@ info:
   description: |
     API for Von Payments hosted checkout page. Merchants create checkout sessions
     and redirect buyers to the hosted payment page. The API handles session
-    lifecycle, Gr4vy payment orchestration, and webhook processing.
+    lifecycle, payment orchestration, and webhook processing.
   version: 0.1.0
   contact:
     name: Von Payments
-    url: https://vonpayments.com
+    url: https://vonpay.com
 
 servers:
-  - url: https://checkout.vonpayments.com
+  - url: https://checkout.vonpay.com
     description: Production
   - url: http://localhost:3001
     description: Local development
@@ -131,10 +131,10 @@ paths:
   /api/checkout/init:
     post:
       operationId: initCheckout
-      summary: Initialize Gr4vy embed (internal)
+      summary: Initialize payment embed (internal)
       description: |
-        Called by the hosted checkout page to initialize the Gr4vy payment embed.
-        Validates the session, moves it to "processing", and returns a Gr4vy token.
+        Called by the hosted checkout page to initialize the payment embed.
+        Validates the session, moves it to "processing", and returns a provider token.
 
         **Internal use only** — not intended for merchant integration.
       tags:
@@ -160,18 +160,34 @@ paths:
               schema:
                 type: object
                 properties:
+                  type:
+                    type: string
+                    description: Provider type for client-side rendering
+                    enum: [card_element, hosted_fields]
                   token:
                     type: string
-                    description: Gr4vy embed token
-                  gr4vyId:
+                    description: Payment provider embed token
+                  providerId:
                     type: string
-                    description: Gr4vy instance ID
+                    nullable: true
+                    description: Provider instance ID (for hosted fields embed)
+                  providerMerchantId:
+                    type: string
+                    description: Provider merchant account ID
                   environment:
                     type: string
                     enum: [sandbox, production]
-                  checkoutSessionId:
+                  providerSessionId:
                     type: string
-                    description: Gr4vy checkout session ID
+                    description: Provider checkout session ID
+                  providerPublishableKey:
+                    type: string
+                    nullable: true
+                    description: Client-side publishable key (for card element)
+                  providerAccountId:
+                    type: string
+                    nullable: true
+                    description: Provider account ID (for card element)
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -184,7 +200,7 @@ paths:
       operationId: completeCheckout
       summary: Complete checkout (internal)
       description: |
-        Called by the hosted checkout page after the Gr4vy embed reports a
+        Called by the hosted checkout page after the payment embed reports a
         successful transaction. Updates session status and returns a signed
         redirect URL.
 
@@ -226,15 +242,14 @@ paths:
                     nullable: true
                     description: Signed redirect URL for the merchant
 
-  /api/webhooks/gr4vy:
+  /api/webhooks/provider:
     post:
       operationId: receiveWebhook
-      summary: Receive Gr4vy webhook
+      summary: Receive provider webhook
       description: |
-        Endpoint for Gr4vy to send webhook events (transaction updates, etc.).
-        Persists the event and reconciles with checkout sessions asynchronously.
-
-        Configure this URL in your Gr4vy dashboard under Webhooks.
+        Endpoint for the payment provider to send webhook events (transaction
+        updates, etc.). Persists the event and reconciles with checkout sessions
+        asynchronously.
       tags:
         - Webhooks
       security: []
@@ -247,7 +262,7 @@ paths:
               properties:
                 id:
                   type: string
-                  description: Gr4vy event ID
+                  description: Webhook event ID
                 type:
                   type: string
                   description: Event type (e.g. transaction.captured)
@@ -432,7 +447,7 @@ components:
           type: string
           format: uri
           description: URL to redirect the buyer to
-          example: https://checkout.vonpayments.com/checkout?session=vp_cs_live_k7x9m2n4p3
+          example: https://checkout.vonpay.com/checkout?session=vp_cs_live_k7x9m2n4p3
         expiresAt:
           type: string
           format: date-time
@@ -468,9 +483,20 @@ components:
         country:
           type: string
           nullable: true
+        collectShipping:
+          type: boolean
+        shippingAddress:
+          type: object
+          nullable: true
+          description: Shipping address (only returned when status is succeeded)
         transactionId:
           type: string
           nullable: true
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
         expiresAt:
           type: string
           format: date-time
@@ -486,9 +512,15 @@ components:
       properties:
         status:
           type: string
-          enum: [healthy, degraded]
+          enum: [ok, healthy, degraded]
+        circuits:
+          type: object
+          description: Circuit breaker states
+          additionalProperties:
+            type: string
         checks:
           type: object
+          description: Dependency health (only with ?deep=true)
           additionalProperties:
             type: string
             enum: [ok, error, skipped]

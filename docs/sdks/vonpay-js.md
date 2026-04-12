@@ -9,7 +9,7 @@ A lightweight drop-in script for creating checkout sessions and redirecting buye
 ## Installation
 
 ```html
-<script src="https://checkout.vonpayments.com/vonpay.js"></script>
+<script src="https://checkout.vonpay.com/vonpay.js"></script>
 ```
 
 ## Configure
@@ -19,7 +19,7 @@ Call once before any other method:
 ```javascript
 VonPay.configure({
   apiKey: "vp_key_live_xxx",
-  baseUrl: "https://checkout.vonpayments.com", // optional, this is the default
+  baseUrl: "https://checkout.vonpay.com", // optional, this is the default
 });
 ```
 

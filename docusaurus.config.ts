@@ -11,8 +11,20 @@ const config: Config = {
     v4: true,
   },
 
-  url: 'https://docs.vonpayments.com',
+  url: 'https://docs.vonpay.com',
   baseUrl: '/',
+
+  headTags: [
+    {
+      tagName: 'link',
+      attributes: {
+        rel: 'alternate',
+        type: 'text/plain',
+        href: 'https://checkout.vonpay.com/llms.txt',
+        title: 'LLM-readable API reference',
+      },
+    },
+  ],
 
   organizationName: 'Von-Payments',
   projectName: 'von-payments-docs',
@@ -85,7 +97,7 @@ const config: Config = {
           title: 'Resources',
           items: [
             { label: 'GitHub', href: 'https://github.com/Von-Payments' },
-            { label: 'Status', href: 'https://checkout.vonpayments.com/api/health' },
+            { label: 'Status', href: 'https://checkout.vonpay.com/api/health' },
           ],
         },
       ],

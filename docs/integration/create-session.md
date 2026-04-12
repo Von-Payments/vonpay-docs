@@ -57,7 +57,7 @@ Idempotency-Key: <unique-key>   (optional, recommended)
 ```json
 {
   "id": "vp_cs_live_k7x9m2n4p3",
-  "checkoutUrl": "https://checkout.vonpayments.com/checkout?session=vp_cs_live_k7x9m2n4p3",
+  "checkoutUrl": "https://checkout.vonpay.com/checkout?session=vp_cs_live_k7x9m2n4p3",
   "expiresAt": "2026-03-31T15:30:00.000Z"
 }
 ```
@@ -80,7 +80,7 @@ Amounts are always in **minor units** (the smallest currency unit):
 ## Example: With Line Items
 
 ```bash
-curl -X POST https://checkout.vonpayments.com/v1/sessions \
+curl -X POST https://checkout.vonpay.com/v1/sessions \
   -H "Authorization: Bearer vp_key_live_xxx" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: order_456_attempt_1" \
@@ -107,7 +107,7 @@ curl -X POST https://checkout.vonpayments.com/v1/sessions \
 ## Example: Simple Payment (No Items)
 
 ```bash
-curl -X POST https://checkout.vonpayments.com/v1/sessions \
+curl -X POST https://checkout.vonpay.com/v1/sessions \
   -H "Authorization: Bearer vp_key_live_xxx" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: simple_pay_001" \
