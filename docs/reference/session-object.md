@@ -29,15 +29,19 @@ The ID is a 10-character random string. It cannot be guessed.
 | `buyerEmail` | string\|null | Buyer's email (encrypted at rest) |
 | `buyerId` | string\|null | Merchant's external customer ID |
 | `lineItems` | array\|null | Order line items |
-| `metadata` | object\|null | Merchant-provided metadata |
+| `metadata` | object\|null | Merchant-provided key-value pairs (passed through to webhooks) |
+| `collectShipping` | boolean | Whether to collect shipping address on checkout page |
+| `shippingAddress` | object\|null | Buyer's shipping address (only returned when status is `succeeded`) |
 | `successUrl` | string\|null | Redirect URL after payment |
 | `cancelUrl` | string\|null | Redirect URL on cancel |
 | `mode` | string | Payment mode (default `"payment"`) |
 | `description` | string\|null | Payment description for bank statements |
 | `locale` | string\|null | Checkout page language (e.g. `"en"`, `"fr"`) |
+| `transactionId` | string\|null | Payment provider's transaction ID (set on completion) |
 | `expiresIn` | integer\|null | Session TTL in seconds (300–3600, default 1800) |
 | `expiresAt` | string | ISO 8601 expiry timestamp |
 | `createdAt` | string | ISO 8601 creation timestamp |
+| `updatedAt` | string | ISO 8601 last update timestamp |
 
 ## Status Lifecycle
 

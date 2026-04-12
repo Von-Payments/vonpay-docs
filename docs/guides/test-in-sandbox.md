@@ -62,8 +62,8 @@ After completing a test payment:
 | Problem | Cause | Fix |
 |---------|-------|-----|
 | "Session not found" | Session expired (30 min TTL) | Create a new session |
-| "Checkout is not configured" | Missing Gr4vy credentials | Set `GR4VY_ID` and `GR4VY_PRIVATE_KEY` |
-| Payment form doesn't load | Gr4vy sandbox not configured | Check Gr4vy dashboard settings |
+| "Checkout is not configured" | Missing payment provider credentials | Set required provider env vars |
+| Payment form doesn't load | Payment provider sandbox not configured | Check provider dashboard settings |
 | Redirect doesn't include `sig` | `VON_PAY_SESSION_SECRET` not set | Add it to `.env.local` |
 
 ## Check Session Status

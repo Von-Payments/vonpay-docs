@@ -11,7 +11,7 @@ After creating a session, send the buyer to the checkout URL.
 The browser snippet creates the session and redirects in one step:
 
 ```html
-<script src="https://checkout.vonpayments.com/vonpay.js"></script>
+<script src="https://checkout.vonpay.com/vonpay.js"></script>
 <script>
   VonPay.configure({ apiKey: "vp_key_live_xxx" });
   VonPay.checkout({

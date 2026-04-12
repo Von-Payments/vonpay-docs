@@ -35,3 +35,16 @@ Card data never touches your servers or ours. We're PCI SAQ-A compliant.
 | [vonpay.js](sdks/vonpay-js.md) | No-backend merchants, quick prototypes | Lowest |
 | [@vonpay/node](sdks/node-sdk.md) | Node.js / TypeScript backends | Low |
 | [REST API](sdks/rest-api.md) | Any language, full control | Low |
+
+## AI / Agent Integration
+
+Building with AI tools like Claude, ChatGPT, Cursor, or Copilot? Point your agent to our machine-readable API summary:
+
+```
+https://checkout.vonpay.com/llms.txt
+```
+
+This single file contains everything an AI agent needs to integrate Von Payments — endpoints, schemas, code examples, and verification logic. Works with Claude Code, Cursor, GitHub Copilot, and any LLM-powered dev tool.
+
+- [llms.txt](/llms.txt) — Full API reference for AI agents
+- [OpenAPI spec](/openapi.yaml) — Machine-readable API specification

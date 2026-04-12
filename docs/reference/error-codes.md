@@ -31,7 +31,7 @@ All errors return JSON with an `error` field and an `X-Request-Id` header.
 | `POST /v1/sessions` | 10 requests | 1 minute |
 | `POST /api/checkout/init` | 20 requests | 1 minute |
 | `POST /api/checkout/complete` | 20 requests | 1 minute |
-| `POST /api/webhooks/gr4vy` | 100 requests | 1 minute |
+| `POST /api/webhooks/provider` | 100 requests | 1 minute |
 
 Rate limits are per IP address. When exceeded, the response includes:
 

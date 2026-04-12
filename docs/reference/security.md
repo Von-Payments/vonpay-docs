@@ -94,4 +94,4 @@ All API endpoints are rate-limited per IP address. See [Error Codes](error-codes
 
 ## Reporting Vulnerabilities
 
-If you discover a security vulnerability, contact security@vonpayments.com.
+If you discover a security vulnerability, contact security@vonpay.com.

@@ -16,9 +16,9 @@ The complete Von Payments Checkout API is documented in OpenAPI 3.1 format.
 |--------|------|------|-------------|
 | `POST` | `/v1/sessions` | Bearer | Create a checkout session |
 | `GET` | `/v1/sessions/{id}` | Bearer | Get session status |
-| `POST` | `/api/checkout/init` | None (internal) | Initialize Gr4vy embed |
+| `POST` | `/api/checkout/init` | None (internal) | Initialize payment embed |
 | `POST` | `/api/checkout/complete` | None (internal) | Finalize payment |
-| `POST` | `/api/webhooks/gr4vy` | Signature | Receive payment webhooks |
+| `POST` | `/api/webhooks/provider` | Signature | Receive payment webhooks |
 | `GET` | `/api/health` | None | Health check |
 
 Endpoints marked "internal" are called by the hosted checkout page, not by merchants.

@@ -1,0 +1,256 @@
+# Von Payments Checkout API
+
+> Von Payments is a hosted checkout page. Merchants create a session via API, redirect the buyer to the checkout URL, the buyer pays, and is redirected back with a signed confirmation.
+
+## Quick Start
+
+1. Call `POST /v1/sessions` with your API key to create a checkout session
+2. Redirect the buyer to the returned `checkoutUrl`
+3. Buyer pays on the Von Payments hosted page (cards, Apple Pay, Google Pay, Klarna, 130+ methods)
+4. Buyer is redirected to your `successUrl` with signed query params
+5. Verify the HMAC signature server-side
+
+## Authentication
+
+All merchant API calls require a Bearer token:
+
+```
+Authorization: Bearer vp_key_live_xxx
+```
+
+## Create a Checkout Session
+
+```
+POST /v1/sessions
+Authorization: Bearer vp_key_live_xxx
+Content-Type: application/json
+Idempotency-Key: optional-dedup-key
+
+{
+  "amount": 1499,
+  "currency": "USD",
+  "country": "US",
+  "successUrl": "https://mystore.com/order/123/confirm",
+  "cancelUrl": "https://mystore.com/cart",
+  "description": "Order #123",
+  "locale": "en",
+  "mode": "payment",
+  "buyerId": "cust_123",
+  "buyerName": "Jane Doe",
+  "buyerEmail": "jane@example.com",
+  "lineItems": [
+    { "name": "Premium Widget", "quantity": 1, "unitAmount": 1499 }
+  ],
+  "metadata": { "orderId": "order_123" },
+  "expiresIn": 1800
+}
+```
+
+Response (201):
+
+```json
+{
+  "id": "vp_cs_live_k7x9m2n4p3abcdef",
+  "checkoutUrl": "https://checkout.vonpay.com/checkout?session=vp_cs_live_k7x9m2n4p3abcdef",
+  "expiresAt": "2026-03-31T15:30:00.000Z"
+}
+```
+
+### Required fields
+
+- `amount` (integer) — amount in minor units (cents). 1499 = $14.99
+- `currency` (string) — ISO 4217, 3 chars (USD, EUR, GBP)
+
+### Optional fields
+
+- `country` (string) — ISO 3166-1 alpha-2, 2 chars. Auto-detected if omitted.
+- `successUrl` (string) — HTTPS redirect URL after payment success
+- `cancelUrl` (string) — HTTPS redirect URL on cancel
+- `description` (string) — payment description for bank statements
+- `locale` (string) — checkout page language (en, fr, de, etc.)
+- `mode` (string) — "payment" (default). Future: "setup" for card-on-file.
+- `buyerId` (string) — your external customer ID (enables saved payment methods)
+- `buyerName` (string) — pre-fills billing form, encrypted at rest
+- `buyerEmail` (string) — encrypted at rest
+- `lineItems` (array) — items displayed on checkout page. Each: { name, quantity, unitAmount, imageUrl? }
+- `metadata` (object) — key-value string pairs, passed through to webhooks
+- `expiresIn` (integer) — session TTL in seconds (300-3600, default 1800)
+
+### Notes
+
+- `merchantId` is derived from your API key — you don't pass it
+- `amount` is the source of truth for charging. `lineItems` are display-only.
+- Sessions expire after 30 minutes by default
+- Idempotency: pass `Idempotency-Key` header to prevent duplicate sessions on retries
+
+## Get Session Status
+
+```
+GET /v1/sessions/vp_cs_live_k7x9m2n4p3abcdef
+Authorization: Bearer vp_key_live_xxx
+```
+
+Response:
+
+```json
+{
+  "id": "vp_cs_live_k7x9m2n4p3abcdef",
+  "status": "succeeded",
+  "mode": "payment",
+  "merchantId": "default",
+  "amount": 1499,
+  "currency": "USD",
+  "country": "US",
+  "description": "Order #123",
+  "transactionId": "txn_abc123",
+  "metadata": { "orderId": "order_123" },
+  "createdAt": "2026-03-31T15:00:00.000Z",
+  "updatedAt": "2026-03-31T15:05:00.000Z",
+  "expiresAt": "2026-03-31T15:30:00.000Z"
+}
+```
+
+Session statuses: `pending` → `processing` → `succeeded` | `failed` | `expired`
+
+## Verify Return URL Signature
+
+After payment, the buyer is redirected to your `successUrl` with signed params:
+
+```
+https://mystore.com/confirm?session=vp_cs_live_xxx&status=succeeded&amount=1499&currency=USD&transaction_id=txn_abc&sig=hexstring
+```
+
+Verify the HMAC-SHA256 signature server-side:
+
+```
+sig = HMAC-SHA256(
+  key:  VON_PAY_SESSION_SECRET,
+  data: "{session}.{status}.{amount}.{currency}.{transaction_id}"
+)
+```
+
+Example data string: `vp_cs_live_k7x9m2n4p3abcdef.succeeded.1499.USD.txn_abc123`
+
+### Node.js verification
+
+```javascript
+import crypto from "crypto";
+
+function verifyReturnSignature(params, secret) {
+  const data = `${params.session}.${params.status}.${params.amount}.${params.currency}.${params.transaction_id || ""}`;
+  const expected = crypto.createHmac("sha256", secret).update(data).digest("hex");
+  return crypto.timingSafeEqual(Buffer.from(params.sig, "hex"), Buffer.from(expected, "hex"));
+}
+```
+
+### Python verification
+
+```python
+import hmac, hashlib
+
+def verify(session, status, amount, currency, transaction_id, sig, secret):
+    data = f"{session}.{status}.{amount}.{currency}.{transaction_id or ''}"
+    expected = hmac.new(secret.encode(), data.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(sig, expected)
+```
+
+## Health Check
+
+```
+GET /api/health
+```
+
+No auth required. Returns `200` when healthy, `503` when degraded.
+
+## Rate Limits
+
+| Endpoint | Limit |
+|----------|-------|
+| POST /v1/sessions | 10/min per IP |
+| GET /v1/sessions/:id | 30/min per IP |
+
+Rate-limited responses return `429` with `Retry-After: 60` header.
+
+## Error Format
+
+All errors return:
+
+```json
+{ "error": "Human-readable message" }
+```
+
+Every response includes `X-Request-Id` header for debugging.
+
+| Code | Meaning |
+|------|---------|
+| 400 | Invalid request body |
+| 401 | Authentication failed |
+| 404 | Session not found |
+| 409 | Session in wrong state |
+| 410 | Session expired |
+| 429 | Rate limited |
+| 500 | Server error |
+
+## SDKs
+
+### Node.js (@vonpay/node)
+
+```bash
+npm install @vonpay/node
+```
+
+```typescript
+import { VonPay } from "@vonpay/node";
+
+const vonpay = new VonPay("vp_key_live_xxx");
+
+// Create session
+const session = await vonpay.sessions.create({
+  amount: 1499,
+  currency: "USD",
+  successUrl: "https://mystore.com/confirm",
+  lineItems: [{ name: "Widget", quantity: 1, unitAmount: 1499 }],
+});
+// Redirect buyer to session.checkoutUrl
+
+// Check status
+const status = await vonpay.sessions.get("vp_cs_live_xxx");
+
+// Verify return signature
+const isValid = VonPay.verifyReturnSignature({
+  session: url.searchParams.get("session"),
+  status: url.searchParams.get("status"),
+  amount: url.searchParams.get("amount"),
+  currency: url.searchParams.get("currency"),
+  transaction_id: url.searchParams.get("transaction_id"),
+  sig: url.searchParams.get("sig"),
+}, process.env.VON_PAY_SESSION_SECRET);
+```
+
+### Browser (vonpay.js)
+
+```html
+<script src="https://checkout.vonpay.com/vonpay.js"></script>
+<script>
+  VonPay.configure({ apiKey: "vp_key_live_xxx" });
+  VonPay.checkout({
+    amount: 1499,
+    currency: "USD",
+    successUrl: "https://mystore.com/confirm",
+  });
+</script>
+```
+
+## Security
+
+- PCI SAQ-A: card data never touches your servers or ours (secure iframe)
+- PII (buyer name, email) encrypted with AES-256-GCM at rest
+- HMAC-SHA256 signed return URLs (includes amount + currency)
+- All URLs must be HTTPS (localhost exempt in sandbox)
+- Session tokens are 16-char cryptographically random strings
+
+## Links
+
+- Docs: https://docs.vonpay.com
+- OpenAPI spec: https://checkout.vonpay.com/openapi.yaml
+- Status: https://checkout.vonpay.com/api/health

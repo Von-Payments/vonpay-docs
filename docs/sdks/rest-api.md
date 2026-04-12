@@ -9,7 +9,7 @@ For developers not using Node.js. Call the API directly with any HTTP client.
 ## Base URL
 
 ```
-https://checkout.vonpayments.com
+https://checkout.vonpay.com
 ```
 
 ## Authentication
@@ -25,7 +25,7 @@ Authorization: Bearer vp_key_live_xxx
 ### Create Session
 
 ```bash
-curl -X POST https://checkout.vonpayments.com/v1/sessions \
+curl -X POST https://checkout.vonpay.com/v1/sessions \
   -H "Authorization: Bearer vp_key_live_xxx" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: unique_key_123" \
@@ -44,7 +44,7 @@ curl -X POST https://checkout.vonpayments.com/v1/sessions \
 ```json
 {
   "id": "vp_cs_live_k7x9m2n4p3",
-  "checkoutUrl": "https://checkout.vonpayments.com/checkout?session=vp_cs_live_k7x9m2n4p3",
+  "checkoutUrl": "https://checkout.vonpay.com/checkout?session=vp_cs_live_k7x9m2n4p3",
   "expiresAt": "2026-03-31T15:30:00.000Z"
 }
 ```
@@ -52,14 +52,14 @@ curl -X POST https://checkout.vonpayments.com/v1/sessions \
 ### Get Session Status
 
 ```bash
-curl https://checkout.vonpayments.com/v1/sessions/vp_cs_live_k7x9m2n4p3 \
+curl https://checkout.vonpay.com/v1/sessions/vp_cs_live_k7x9m2n4p3 \
   -H "Authorization: Bearer vp_key_live_xxx"
 ```
 
 ### Health Check
 
 ```bash
-curl https://checkout.vonpayments.com/api/health
+curl https://checkout.vonpay.com/api/health
 ```
 
 No authentication required.
@@ -70,7 +70,7 @@ No authentication required.
 |----------|-------|
 | `POST /v1/sessions` | 10 requests/minute per IP |
 | `POST /api/checkout/init` | 20 requests/minute per IP |
-| `POST /api/webhooks/gr4vy` | 100 requests/minute |
+| `POST /api/webhooks/provider` | 100 requests/minute |
 
 Rate-limited responses return `429` with a `Retry-After` header.
 

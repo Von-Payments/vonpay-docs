@@ -24,7 +24,7 @@ npm install @vonpay/node
 ### Browser snippet
 
 ```html
-<script src="https://checkout.vonpayments.com/vonpay.js"></script>
+<script src="https://checkout.vonpay.com/vonpay.js"></script>
 ```
 
 ### REST API
@@ -63,7 +63,7 @@ res.redirect(session.checkoutUrl);
 ### vonpay.js (browser)
 
 ```html
-<script src="https://checkout.vonpayments.com/vonpay.js"></script>
+<script src="https://checkout.vonpay.com/vonpay.js"></script>
 <button id="pay-btn">Pay $14.99</button>
 
 <script>
@@ -85,7 +85,7 @@ res.redirect(session.checkoutUrl);
 ### cURL
 
 ```bash
-curl -X POST https://checkout.vonpayments.com/v1/sessions \
+curl -X POST https://checkout.vonpay.com/v1/sessions \
   -H "Authorization: Bearer vp_key_test_xxx" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: order_123_attempt_1" \
@@ -104,7 +104,7 @@ curl -X POST https://checkout.vonpayments.com/v1/sessions \
 ```json
 {
   "id": "vp_cs_test_k7x9m2n4p3",
-  "checkoutUrl": "https://checkout.vonpayments.com/checkout?session=vp_cs_test_k7x9m2n4p3",
+  "checkoutUrl": "https://checkout.vonpay.com/checkout?session=vp_cs_test_k7x9m2n4p3",
   "expiresAt": "2026-03-31T15:30:00.000Z"
 }
 ```
