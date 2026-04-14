@@ -27,7 +27,7 @@ const config: Config = {
   ],
 
   organizationName: 'Von-Payments',
-  projectName: 'von-payments-docs',
+  projectName: 'vonpay-docs',
 
   onBrokenLinks: 'throw',
 
@@ -43,7 +43,7 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           routeBasePath: '/',
-          editUrl: 'https://github.com/Von-Payments/von-payments-docs/tree/main/',
+          editUrl: 'https://github.com/Von-Payments/vonpay-docs/tree/main/',
         },
         blog: false,
         theme: {
