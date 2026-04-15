@@ -34,10 +34,10 @@ https://mystore.com/order/123/confirm
 ### Node SDK
 
 ```typescript
-import { VonPay } from "@vonpay/node";
+import { VonPayCheckout } from "@vonpay/checkout-node";
 
 const url = new URL(req.url);
-const isValid = VonPay.verifyReturnSignature(
+const isValid = VonPayCheckout.verifyReturnSignature(
   {
     session: url.searchParams.get("session"),
     status: url.searchParams.get("status"),

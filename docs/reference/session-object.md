@@ -17,37 +17,29 @@ The ID is a 10-character random string. It cannot be guessed.
 
 ## Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Session ID |
-| `merchantId` | string | Merchant account that owns this session |
-| `amount` | integer | Payment amount in minor units |
-| `currency` | string | ISO 4217 currency code |
-| `country` | string | ISO 3166-1 alpha-2 country code |
-| `status` | string | Current status (see below) |
-| `buyerName` | string\|null | Buyer's name (encrypted at rest) |
-| `buyerEmail` | string\|null | Buyer's email (encrypted at rest) |
-| `buyerId` | string\|null | Merchant's external customer ID |
-| `lineItems` | array\|null | Order line items |
-| `metadata` | object\|null | Merchant-provided key-value pairs (passed through to webhooks) |
-| `collectShipping` | boolean | Whether to collect shipping address on checkout page |
-| `shippingAddress` | object\|null | Buyer's shipping address (only returned when status is `succeeded`) |
-| `successUrl` | string\|null | Redirect URL after payment |
-| `cancelUrl` | string\|null | Redirect URL on cancel |
-| `mode` | string | Payment mode (default `"payment"`) |
-| `description` | string\|null | Payment description for bank statements |
-| `locale` | string\|null | Checkout page language (e.g. `"en"`, `"fr"`) |
-| `transactionId` | string\|null | Payment provider's transaction ID (set on completion) |
-| `expiresIn` | integer\|null | Session TTL in seconds (300–3600, default 1800) |
-| `expiresAt` | string | ISO 8601 expiry timestamp |
-| `createdAt` | string | ISO 8601 creation timestamp |
-| `updatedAt` | string | ISO 8601 last update timestamp |
+| Field | Type | Always Present | Description |
+|-------|------|----------------|-------------|
+| `id` | string | Yes | Session ID |
+| `status` | string | Yes | Current status: `pending`, `succeeded`, `failed`, `expired` |
+| `mode` | string | Yes | Payment mode (default `"payment"`) |
+| `merchantId` | string | Yes | Merchant account that owns this session |
+| `amount` | integer | Yes | Payment amount in minor units |
+| `currency` | string | Yes | ISO 4217 currency code |
+| `country` | string | No | ISO 3166-1 alpha-2 country code (optional) |
+| `description` | string | No | Payment description for bank statements |
+| `collectShipping` | boolean | No | Whether to collect shipping address on checkout page |
+| `shippingAddress` | object | No | Buyer's shipping address (only present when status is `succeeded`) |
+| `transactionId` | string | No | Payment provider's transaction ID (set on completion) |
+| `metadata` | object | No | Merchant-provided key-value pairs (passed through to webhooks) |
+| `createdAt` | string | Yes | ISO 8601 creation timestamp |
+| `updatedAt` | string | Yes | ISO 8601 last update timestamp |
+| `expiresAt` | string | Yes | ISO 8601 expiry timestamp |
 
 ## Status Lifecycle
 
 ```
-pending ────> processing ────> succeeded
-                          └──> failed
+pending ────> succeeded
+         └──> failed
 
 pending ────> expired
 ```
@@ -55,7 +47,6 @@ pending ────> expired
 | Status | Description | Trigger |
 |--------|-------------|---------|
 | `pending` | Session created, waiting for buyer | `POST /v1/sessions` |
-| `processing` | Buyer is on the checkout page, payment form loaded | Buyer clicks "Proceed to Payment" |
 | `succeeded` | Payment completed | Payment processor confirms |
 | `failed` | Payment declined or errored | Payment processor rejects |
 | `expired` | 30-minute TTL elapsed | Automatic |
@@ -63,6 +54,5 @@ pending ────> expired
 ### Rules
 
 - Transitions are **one-way** — a succeeded session cannot become failed
-- `pending → processing` is **atomic** — prevents double-initialization
 - A session can only be used **once** — no replays
 - Expired sessions cannot be re-activated — create a new session

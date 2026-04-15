@@ -13,9 +13,8 @@ The browser snippet creates the session and redirects in one step:
 ```html
 <script src="https://checkout.vonpay.com/vonpay.js"></script>
 <script>
-  VonPay.configure({ apiKey: "vp_key_live_xxx" });
-  VonPay.checkout({
-    merchantId: "default",
+  VonPayCheckout.configure({ apiKey: "vp_sk_live_xxx" });
+  VonPayCheckout.checkout({
     amount: 1499,
     currency: "USD",
     country: "US",
@@ -32,7 +31,6 @@ Your server creates the session, then redirects the buyer:
 // Express.js example
 app.post("/checkout", async (req, res) => {
   const session = await vonpay.sessions.create({
-    merchantId: "default",
     amount: req.body.amount,
     currency: "USD",
     country: "US",

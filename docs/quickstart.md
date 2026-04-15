@@ -8,45 +8,46 @@ Get a working checkout integration in 5 minutes.
 
 ## Prerequisites
 
-- A Von Payments API key (`vp_key_live_xxx` or `vp_key_test_xxx`)
-- Your `merchantId` (provided during onboarding, defaults to `"default"`)
+- A Von Payments account with API keys from the [developer dashboard](https://vonpay.com/developers)
+- Node.js 20+ (or Python 3.9+ for the Python SDK)
 
 ---
 
-## Step 1: Install (pick one)
+## Step 1: Install the SDK
 
-### Node SDK
+### Node.js
 
 ```bash
-npm install @vonpay/node
+npm install @vonpay/checkout-node
 ```
 
-### Browser snippet
+### Python
 
-```html
-<script src="https://checkout.vonpay.com/vonpay.js"></script>
+```bash
+pip install vonpay-checkout
 ```
 
-### REST API
+### CLI
 
-No installation — use `curl`, `fetch`, or any HTTP client.
+```bash
+npm install -g @vonpay/checkout-cli
+vonpay checkout login
+```
 
 ---
 
 ## Step 2: Create a checkout session
 
-### Node SDK
+### Node.js
 
 ```typescript
-import { VonPay } from "@vonpay/node";
+import { VonPayCheckout } from "@vonpay/checkout-node";
 
-const vonpay = new VonPay("vp_key_test_xxx");
+const vonpay = new VonPayCheckout(process.env.VON_PAY_SECRET_KEY);
 
 const session = await vonpay.sessions.create({
-  merchantId: "default",
   amount: 1499,           // $14.99 in cents
   currency: "USD",
-  country: "US",
   successUrl: "https://mystore.com/order/123/confirm",
   cancelUrl: "https://mystore.com/cart",
   lineItems: [
@@ -55,45 +56,45 @@ const session = await vonpay.sessions.create({
   buyerName: "Jane Doe",
   buyerEmail: "jane@example.com",
 });
-
-// Redirect the buyer
-res.redirect(session.checkoutUrl);
 ```
 
-### vonpay.js (browser)
+### Python
 
-```html
-<script src="https://checkout.vonpay.com/vonpay.js"></script>
-<button id="pay-btn">Pay $14.99</button>
+```python
+from vonpay.checkout import VonPayCheckout
 
-<script>
-  VonPay.configure({ apiKey: "vp_key_test_xxx" });
+vonpay = VonPayCheckout(os.environ["VON_PAY_SECRET_KEY"])
 
-  VonPay.button("#pay-btn", {
-    merchantId: "default",
-    amount: 1499,
-    currency: "USD",
-    country: "US",
-    successUrl: "https://mystore.com/order/123/confirm",
-    lineItems: [
-      { name: "Premium Widget", quantity: 1, unitAmount: 1499 }
+session = vonpay.sessions.create(
+    amount=1499,
+    currency="USD",
+    success_url="https://mystore.com/order/123/confirm",
+    cancel_url="https://mystore.com/cart",
+    line_items=[
+        {"name": "Premium Widget", "quantity": 1, "unit_amount": 1499},
     ],
-  });
-</script>
+    buyer_name="Jane Doe",
+    buyer_email="jane@example.com",
+)
+```
+
+### CLI
+
+```bash
+vonpay checkout sessions create --amount 1499 --currency USD
 ```
 
 ### cURL
 
 ```bash
 curl -X POST https://checkout.vonpay.com/v1/sessions \
-  -H "Authorization: Bearer vp_key_test_xxx" \
+  -H "Authorization: Bearer vp_sk_test_xxx" \
   -H "Content-Type: application/json" \
+  -H "Von-Pay-Version: 2026-01-01" \
   -H "Idempotency-Key: order_123_attempt_1" \
   -d '{
-    "merchantId": "default",
     "amount": 1499,
     "currency": "USD",
-    "country": "US",
     "successUrl": "https://mystore.com/order/123/confirm",
     "lineItems": [{"name": "Premium Widget", "quantity": 1, "unitAmount": 1499}]
   }'
@@ -111,19 +112,104 @@ curl -X POST https://checkout.vonpay.com/v1/sessions \
 
 ---
 
-## Step 3: Buyer pays
+## Step 3: Redirect the buyer
 
-Redirect the buyer to `checkoutUrl`. They'll see the Von Payments hosted checkout page with:
+Send the buyer to the checkout URL returned in the session response.
 
-- Billing address form
-- Payment methods (cards, Apple Pay, Google Pay, Klarna, etc. — auto-detected)
-- Order summary with your line items
+### Node.js (Express)
 
-You don't need to do anything here. The page handles everything.
+```typescript
+res.redirect(session.checkoutUrl);
+```
+
+### Python (Flask)
+
+```python
+return redirect(session.checkout_url)
+```
+
+The buyer sees the Von Payments hosted checkout page with billing address, payment methods (cards, Apple Pay, Google Pay, Klarna, etc.), and your order summary. You don't need to handle anything on this page.
 
 ---
 
-## Step 4: Handle the return
+## Step 4: Handle the webhook
+
+When a payment completes, Von Payments sends a `POST` to your configured webhook URL. The webhook secret is your merchant API key (`vp_sk_*`), not a separate secret.
+
+### Node.js (Express)
+
+```typescript
+import { VonPayCheckout } from "@vonpay/checkout-node";
+
+const vonpay = new VonPayCheckout(process.env.VON_PAY_SECRET_KEY);
+
+app.post("/webhooks/vonpay", express.raw({ type: "application/json" }), (req, res) => {
+  const signature = req.headers["x-vonpay-signature"];
+  const timestamp = req.headers["x-vonpay-timestamp"];
+
+  try {
+    const event = vonpay.webhooks.constructEvent(
+      req.body,                        // raw body
+      signature,                       // X-VonPay-Signature header
+      process.env.VON_PAY_SECRET_KEY,  // your API key IS the webhook secret
+      timestamp                        // X-VonPay-Timestamp header
+    );
+
+    switch (event.type) {
+      case "session.succeeded":
+        console.log(`Payment succeeded: ${event.transactionId}`);
+        // fulfill the order
+        break;
+      case "session.failed":
+        console.log(`Payment failed: ${event.error}`);
+        break;
+    }
+
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error("Webhook verification failed:", err.message);
+    res.status(400).json({ error: "Invalid signature" });
+  }
+});
+```
+
+### Python (Flask)
+
+```python
+from vonpay.checkout import VonPayCheckout
+
+vonpay = VonPayCheckout(os.environ["VON_PAY_SECRET_KEY"])
+
+@app.route("/webhooks/vonpay", methods=["POST"])
+def webhook():
+    signature = request.headers.get("X-VonPay-Signature")
+    timestamp = request.headers.get("X-VonPay-Timestamp")
+
+    try:
+        event = vonpay.webhooks.construct_event(
+            request.data,
+            signature,
+            os.environ["VON_PAY_SECRET_KEY"],
+            timestamp,
+        )
+
+        if event["type"] == "session.succeeded":
+            print(f"Payment succeeded: {event['transactionId']}")
+
+        return {"received": True}, 200
+    except Exception as e:
+        return {"error": str(e)}, 400
+```
+
+**Key details:**
+
+- The webhook secret **is your API key** (`vp_sk_*`). There is no separate webhook secret.
+- The `X-VonPay-Signature` header contains the HMAC-SHA256 signature.
+- The `X-VonPay-Timestamp` header (ISO 8601) is used for replay protection with a +/-5 minute tolerance.
+
+---
+
+## Step 5: Verify the return redirect
 
 After payment, the buyer is redirected to your `successUrl` with signed query parameters:
 
@@ -137,13 +223,13 @@ https://mystore.com/order/123/confirm
   &sig=e4f7a2b1c3d5...
 ```
 
-**Always verify the signature server-side:**
+**Always verify the signature server-side.** The secret for return signatures is your session secret (`VON_PAY_SESSION_SECRET`, prefixed `ss_test_*` or `ss_live_*`), **not** your API key.
 
 ```typescript
-import { VonPay } from "@vonpay/node";
+import { VonPayCheckout } from "@vonpay/checkout-node";
 
-const url = new URL(req.url);
-const isValid = VonPay.verifyReturnSignature(
+const url = new URL(req.url, `https://${req.headers.host}`);
+const isValid = VonPayCheckout.verifyReturnSignature(
   {
     session: url.searchParams.get("session"),
     status: url.searchParams.get("status"),
@@ -152,11 +238,11 @@ const isValid = VonPay.verifyReturnSignature(
     transaction_id: url.searchParams.get("transaction_id"),
     sig: url.searchParams.get("sig"),
   },
-  process.env.VON_PAY_SESSION_SECRET
+  process.env.VON_PAY_SESSION_SECRET  // ss_test_* or ss_live_*
 );
 
 if (!isValid) {
-  throw new Error("Invalid signature");
+  throw new Error("Invalid return signature");
 }
 
 // Safe to show order confirmation
@@ -164,23 +250,22 @@ if (!isValid) {
 
 ---
 
-## Step 5: Test it
+## Step 6: Go live
 
-1. Create a session using your test key (`vp_key_test_xxx`)
-2. Open the `checkoutUrl` in your browser
-3. Fill in the payment form with a test card
-4. Verify you're redirected back with `status=succeeded`
-5. Verify the HMAC signature matches
+Replace your test keys with live keys. That's it.
 
-See [Test in Sandbox](guides/test-in-sandbox.md) for test card numbers and troubleshooting.
+1. Swap `vp_sk_test_xxx` for `vp_sk_live_xxx`
+2. Update your session secret from `ss_test_*` to `ss_live_*`
+3. Ensure `successUrl` uses HTTPS
+4. Test with a small real payment
 
 ---
 
-## Step 6: Go live
+## Next steps
 
-1. Swap `vp_key_test_xxx` for `vp_key_live_xxx`
-2. Ensure `successUrl` uses HTTPS
-3. Verify signature checking is implemented
-4. Test with a small real payment
-
-See [Going Live](guides/going-live.md) for the full checklist.
+- [Webhooks Guide](integration/webhooks.md) — Event types, payloads, and retry behavior
+- [Error Handling](sdks/node-sdk.md#error-handling) — Structured errors and retry logic
+- [Node SDK Reference](sdks/node-sdk.md) — Full API surface
+- [CLI Reference](sdks/cli.md) — Command-line tools
+- [Python SDK](sdks/python-sdk.md) — Python integration
+- [Sample Apps](https://github.com/vonpay/examples) — Working example integrations

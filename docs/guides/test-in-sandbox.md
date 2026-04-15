@@ -8,18 +8,17 @@ Test the full checkout flow end-to-end before processing real payments.
 
 ## Setup
 
-1. Use your test API key: `vp_key_test_xxx`
+1. Use your test API key: `vp_sk_test_xxx`
 2. The sandbox uses test payment processors — no real charges
 
 ## Create a Test Session
 
 ```bash
 curl -X POST http://localhost:3001/v1/sessions \
-  -H "Authorization: Bearer vp_key_test_xxx" \
+  -H "Authorization: Bearer vp_sk_test_xxx" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: test_session_001" \
   -d '{
-    "merchantId": "default",
     "amount": 1499,
     "currency": "USD",
     "country": "US",
@@ -72,7 +71,7 @@ After payment, verify the session status was updated:
 
 ```bash
 curl http://localhost:3001/v1/sessions/vp_cs_test_xxx \
-  -H "Authorization: Bearer vp_key_test_xxx"
+  -H "Authorization: Bearer vp_sk_test_xxx"
 ```
 
 The `status` should be `"succeeded"` or `"failed"`.

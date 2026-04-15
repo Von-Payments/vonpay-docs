@@ -19,8 +19,8 @@ Checklist for moving from sandbox to production.
 Replace your test key with your live key:
 
 ```diff
-- Authorization: Bearer vp_key_test_xxx
-+ Authorization: Bearer vp_key_live_xxx
+- Authorization: Bearer vp_sk_test_xxx
++ Authorization: Bearer vp_sk_live_xxx
 ```
 
 ### 2. HTTPS Required
@@ -36,7 +36,7 @@ Production requires HTTPS for all URLs:
 Ensure these are set in your production environment:
 
 ```
-VON_PAY_API_KEY=vp_key_live_xxx          # Your live API key
+VON_PAY_SECRET_KEY=vp_sk_live_xxx        # Your live API key
 VON_PAY_SESSION_SECRET=<random-string>    # Shared HMAC secret (same on both sides)
 ```
 

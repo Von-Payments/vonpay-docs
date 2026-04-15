@@ -17,7 +17,7 @@ https://checkout.vonpay.com
 All merchant-facing endpoints require a Bearer token:
 
 ```
-Authorization: Bearer vp_key_live_xxx
+Authorization: Bearer vp_sk_live_xxx
 ```
 
 ## Endpoints
@@ -26,11 +26,11 @@ Authorization: Bearer vp_key_live_xxx
 
 ```bash
 curl -X POST https://checkout.vonpay.com/v1/sessions \
-  -H "Authorization: Bearer vp_key_live_xxx" \
+  -H "Authorization: Bearer vp_sk_live_xxx" \
   -H "Content-Type: application/json" \
+  -H "Von-Pay-Version: 2026-04-14" \
   -H "Idempotency-Key: unique_key_123" \
   -d '{
-    "merchantId": "default",
     "amount": 1499,
     "currency": "USD",
     "country": "US",
@@ -53,7 +53,8 @@ curl -X POST https://checkout.vonpay.com/v1/sessions \
 
 ```bash
 curl https://checkout.vonpay.com/v1/sessions/vp_cs_live_k7x9m2n4p3 \
-  -H "Authorization: Bearer vp_key_live_xxx"
+  -H "Authorization: Bearer vp_sk_live_xxx" \
+  -H "Von-Pay-Version: 2026-04-14"
 ```
 
 ### Health Check

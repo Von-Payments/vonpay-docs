@@ -9,11 +9,11 @@ sidebar_position: 4
 API requests use Bearer token authentication:
 
 ```
-Authorization: Bearer vp_key_live_xxx
+Authorization: Bearer vp_sk_live_xxx
 ```
 
-- **Test keys** (`vp_key_test_xxx`) — sandbox only, no real charges
-- **Live keys** (`vp_key_live_xxx`) — production, real payments
+- **Test keys** (`vp_sk_test_xxx`) — sandbox only, no real charges
+- **Live keys** (`vp_sk_live_xxx`) — production, real payments
 
 Keep your API key secret. If compromised, contact Von Payments to rotate it.
 
@@ -91,6 +91,45 @@ The checkout page serves these headers:
 ## Rate Limiting
 
 All API endpoints are rate-limited per IP address. See [Error Codes](error-codes.md) for limits.
+
+## API Versioning
+
+The API uses date-based versioning via the `Von-Pay-Version` header:
+
+```
+Von-Pay-Version: 2026-04-14
+```
+
+- If omitted, your account's default API version is used
+- Pin this header to a specific date to prevent breaking changes when the API evolves
+- New versions are announced in the changelog before becoming the default
+- The version date is returned in the `Von-Pay-Version` response header
+
+## Webhook Signature Verification
+
+Webhook payloads are signed using your **API key** as the HMAC secret, not a separate webhook secret. The signature is included in the `Von-Pay-Signature` request header:
+
+```
+Von-Pay-Signature: sha256=<hex-encoded-hmac>
+```
+
+To verify:
+
+1. Read the raw request body (before JSON parsing)
+2. Compute `HMAC-SHA256(key: your_api_key, data: raw_body)`
+3. Compare the result with the signature in the header using a timing-safe comparison
+
+```typescript
+import crypto from "crypto";
+
+function verifyWebhookSignature(rawBody: string, signature: string, apiKey: string): boolean {
+  const expected = crypto.createHmac("sha256", apiKey).update(rawBody).digest("hex");
+  const received = signature.replace("sha256=", "");
+  return crypto.timingSafeEqual(Buffer.from(received, "hex"), Buffer.from(expected, "hex"));
+}
+```
+
+> **Important:** The webhook signing secret is your API key (`vp_sk_live_xxx` or `vp_sk_test_xxx`), not the session signing secret (`ss_live_*` / `ss_test_*`). The session signing secret is only used for return URL signatures.
 
 ## Reporting Vulnerabilities
 
