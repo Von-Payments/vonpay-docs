@@ -9,8 +9,10 @@ Typed TypeScript/JavaScript client for the Von Payments Checkout API. Zero runti
 ## Install
 
 ```bash
-npm install @vonpay/checkout-node
+npm install @vonpay/checkout-node@0.1.0
 ```
+
+Pinning to an exact version is recommended during the pre-1.0 window — minor bumps may add options or change defaults.
 
 ## Initialize
 
@@ -160,9 +162,9 @@ The webhook secret is your merchant API key (`vp_sk_*`). There is no separate we
 
 ---
 
-## VonPayCheckout.verifyReturnSignature(params, secret)
+## VonPayCheckout.verifyReturnSignature(params, secret, options?)
 
-Static method. Verify the HMAC signature on a return URL redirect after the buyer completes checkout.
+Static method. Verify the HMAC signature on a return URL redirect after the buyer completes checkout. Auto-detects v1 (legacy) and v2 (current) signature formats.
 
 ```typescript
 import { VonPayCheckout } from "@vonpay/checkout-node";
@@ -177,11 +179,28 @@ const isValid = VonPayCheckout.verifyReturnSignature(
     transaction_id: url.searchParams.get("transaction_id"),
     sig: url.searchParams.get("sig"),
   },
-  process.env.VON_PAY_SESSION_SECRET  // ss_test_* or ss_live_*, NOT the API key
+  process.env.VON_PAY_SESSION_SECRET,  // ss_test_* or ss_live_*, NOT the API key
+  {
+    expectedSuccessUrl: "https://mystore.com/order/123/confirm",
+    expectedKeyMode: "live",             // "live" or "test"
+    maxAgeSeconds: 600,                  // optional, default 600
+  },
 );
 ```
 
-The secret for return signatures is the session secret (`ss_*`), **not** the API key. Uses `crypto.timingSafeEqual` to prevent timing attacks.
+The secret is the session secret (`ss_*`), **not** the API key. Uses `crypto.timingSafeEqual` to prevent timing attacks.
+
+### Options bag (v2 signatures)
+
+`expectedSuccessUrl` and `expectedKeyMode` are **required** when the incoming `sig` starts with `v2.`. Passing them for v1 signatures is harmless — they're ignored.
+
+| Option | Required for v2? | Default | Purpose |
+|---|---|---|---|
+| `expectedSuccessUrl` | Yes | — | The `successUrl` you passed to `sessions.create`. Normalised (trailing slash stripped, query sorted, fragment dropped). |
+| `expectedKeyMode` | Yes | — | `"test"` or `"live"`. Prevents test-mode sigs from being accepted as live. |
+| `maxAgeSeconds` | No | `600` | Maximum age of the signature in seconds. |
+
+See [Handle the Return](../integration/handle-return.md) for a full walkthrough of the v2 format and the rationale.
 
 ---
 

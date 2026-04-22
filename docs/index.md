@@ -21,6 +21,7 @@ Card data never touches your servers or ours. We're PCI SAQ-A compliant.
 
 - [Quickstart](quickstart.md) — Full integration in 5 minutes
 - [How It Works](how-it-works.md) — Architecture and session lifecycle
+- [Vora — Payment Routing](concepts/vora.md) — How processor selection works
 - [API Reference](reference/api.md) — OpenAPI spec
 - [Node SDK](sdks/node-sdk.md) — `@vonpay/checkout-node`
 - [Python SDK](sdks/python-sdk.md) — `vonpay-checkout`
@@ -28,6 +29,7 @@ Card data never touches your servers or ours. We're PCI SAQ-A compliant.
 - [Drop-in Snippet](sdks/vonpay-js.md) — `vonpay.js`
 - [MCP Server](sdks/mcp.md) — AI agent integration
 - [REST API](sdks/rest-api.md) — cURL examples
+- [Handle the Return](integration/handle-return.md) — v2 signed-redirect verification
 - [Webhooks](integration/webhooks.md) — Real-time payment events
 - [Test in Sandbox](guides/test-in-sandbox.md) — Try it before going live
 - [Go Live](guides/going-live.md) — Production checklist

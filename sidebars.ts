@@ -7,6 +7,13 @@ const sidebars: SidebarsConfig = {
     'how-it-works',
     {
       type: 'category',
+      label: 'Concepts',
+      items: [
+        'concepts/vora',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Integration',
       items: [
         'integration/create-session',

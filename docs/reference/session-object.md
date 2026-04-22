@@ -17,6 +17,8 @@ The ID is a 10-character random string. It cannot be guessed.
 
 ## Fields
 
+### Core fields
+
 | Field | Type | Always Present | Description |
 |-------|------|----------------|-------------|
 | `id` | string | Yes | Session ID |
@@ -34,6 +36,18 @@ The ID is a 10-character random string. It cannot be guessed.
 | `createdAt` | string | Yes | ISO 8601 creation timestamp |
 | `updatedAt` | string | Yes | ISO 8601 last update timestamp |
 | `expiresAt` | string | Yes | ISO 8601 expiry timestamp |
+
+### Provider fields (Vora routing)
+
+These fields expose which payment processor Von Payments routed the session to. They are read-only and can be ignored for simple integrations — see [Vora — Payment Routing](../concepts/vora.md) for the full explanation.
+
+| Field | Type | Present | Description |
+|-------|------|---------|-------------|
+| `type` | string | Init response | Processor family: `stripe_connect_direct`, `gr4vy`, `vonpay_router`, etc. |
+| `providerId` | string | Init response | Von Payments internal ID of the processor row handling this session. |
+| `providerMerchantId` | string | Init response | Processor-side merchant ID (e.g. Stripe `acct_...`). |
+| `providerPublishableKey` | string | Init response | Processor publishable key if the checkout page loads the processor's client-side SDK. |
+| `providerAccountId` | string | Init response | Processor-specific account ID for reporting and reconciliation. |
 
 ## Status Lifecycle
 

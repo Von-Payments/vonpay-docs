@@ -11,8 +11,10 @@ Typed Python client for the Von Payments Checkout API, published as `vonpay-chec
 ## Install
 
 ```bash
-pip install vonpay-checkout
+pip install vonpay-checkout==0.1.0
 ```
+
+Pinning to an exact version is recommended during the pre-1.0 window — minor bumps may add options or change defaults.
 
 ## Initialize
 
@@ -66,25 +68,25 @@ result = client.sessions.validate(
 
 ### Verify signature
 
-Verify the HMAC-SHA256 signature on an incoming webhook request.
+Verify the HMAC-SHA256 signature on an incoming webhook request. The webhook secret **is your API key** (`vp_sk_*`) — there is no separate webhook secret.
 
 ```python
 is_valid = client.webhooks.verify_signature(
     payload=request_body,
     signature=request.headers["X-VonPay-Signature"],
-    secret="whsec_...",
+    secret=os.environ["VON_PAY_SECRET_KEY"],  # your API key IS the webhook secret
 )
 ```
 
 ### Construct event
 
-Parse and verify a webhook payload into a typed event object.
+Parse and verify a webhook payload into a typed event object. Checks the timestamp for replay protection with a ±5 minute tolerance.
 
 ```python
 event = client.webhooks.construct_event(
     payload=request_body,
     signature=request.headers["X-VonPay-Signature"],
-    secret="whsec_...",
+    secret=os.environ["VON_PAY_SECRET_KEY"],
     timestamp=request.headers["X-VonPay-Timestamp"],
 )
 
@@ -94,24 +96,40 @@ print(event.session_id)  # "vp_cs_test_abc123"
 
 ## Return URL Verification
 
-Verify the HMAC signature on the redirect back from checkout. This is a static method — no client instance needed.
+Verify the HMAC signature on the redirect back from checkout. This is a static method — no client instance needed. Auto-detects v1 (legacy) and v2 (current) signature formats.
 
 ```python
 params = {
-    "session": "vp_cs_test_abc123",
-    "status": "succeeded",
-    "amount": "1499",
-    "currency": "USD",
-    "sig": "a1b2c3d4...",
+    "session": request.args["session"],
+    "status": request.args["status"],
+    "amount": request.args["amount"],
+    "currency": request.args["currency"],
+    "transaction_id": request.args["transaction_id"],
+    "sig": request.args["sig"],
 }
 
 is_valid = VonPayCheckout.verify_return_signature(
     params=params,
-    secret="ss_test_...",  # session secret (ss_* prefix)
+    secret=os.environ["VON_PAY_SESSION_SECRET"],  # ss_test_* or ss_live_*
+    expected_success_url="https://mystore.com/order/123/confirm",
+    expected_key_mode="live",          # "live" or "test"
+    max_age_seconds=600,               # optional, default 600
 )
 ```
 
-The `params` dict must include: `session`, `status`, `amount`, `currency`, and `sig`. The `secret` is the session secret with the `ss_*` prefix.
+The `secret` is the session secret (`ss_*` prefix), **not** the API key.
+
+### Options (v2 signatures)
+
+`expected_success_url` and `expected_key_mode` are **required** when the `sig` starts with `v2.`. For v1 signatures they are ignored.
+
+| Option | Required for v2? | Default | Purpose |
+|---|---|---|---|
+| `expected_success_url` | Yes | — | The `success_url` you passed to `sessions.create`. Normalised (trailing slash stripped, query sorted, fragment dropped). |
+| `expected_key_mode` | Yes | — | `"test"` or `"live"`. Prevents test-mode sigs from being accepted as live. |
+| `max_age_seconds` | No | `600` | Maximum age of the signature in seconds. |
+
+See [Handle the Return](../integration/handle-return.md) for a full walkthrough of the v2 format.
 
 ## Health Check
 

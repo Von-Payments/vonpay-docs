@@ -57,9 +57,18 @@ Idempotency-Key: <unique-key>   (optional, recommended)
 {
   "id": "vp_cs_live_k7x9m2n4p3",
   "checkoutUrl": "https://checkout.vonpay.com/checkout?session=vp_cs_live_k7x9m2n4p3",
-  "expiresAt": "2026-03-31T15:30:00.000Z"
+  "expiresAt": "2026-03-31T15:30:00.000Z",
+  "type": "vonpay_router",
+  "providerId": "prv_stripe_abc123",
+  "providerMerchantId": "acct_1HxyzExampleStripe",
+  "providerPublishableKey": "pk_live_...",
+  "providerAccountId": "acct_1HxyzExampleStripe"
 }
 ```
+
+### Provider fields
+
+The `type` and `provider*` fields expose which payment processor Von Payments will route this session through. For most integrations you can ignore them — the buyer flow is identical regardless of processor. See [Vora — Payment Routing](../concepts/vora.md) and [Session object reference](../reference/session-object.md#provider-fields-vora-routing).
 
 ## Session Expiry
 

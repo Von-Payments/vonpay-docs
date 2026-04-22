@@ -18,13 +18,13 @@ Get a working checkout integration in 5 minutes.
 ### Node.js
 
 ```bash
-npm install @vonpay/checkout-node
+npm install @vonpay/checkout-node@0.1.0
 ```
 
 ### Python
 
 ```bash
-pip install vonpay-checkout
+pip install vonpay-checkout==0.1.0
 ```
 
 ### CLI
@@ -33,6 +33,8 @@ pip install vonpay-checkout
 npm install -g @vonpay/checkout-cli
 vonpay checkout login
 ```
+
+Pinning to an exact version is recommended during the pre-1.0 window.
 
 ---
 
@@ -220,7 +222,7 @@ https://mystore.com/order/123/confirm
   &amount=1499
   &currency=USD
   &transaction_id=abc123
-  &sig=e4f7a2b1c3d5...
+  &sig=v2.eyJzaWQiOi...
 ```
 
 **Always verify the signature server-side.** The secret for return signatures is your session secret (`VON_PAY_SESSION_SECRET`, prefixed `ss_test_*` or `ss_live_*`), **not** your API key.
@@ -238,7 +240,11 @@ const isValid = VonPayCheckout.verifyReturnSignature(
     transaction_id: url.searchParams.get("transaction_id"),
     sig: url.searchParams.get("sig"),
   },
-  process.env.VON_PAY_SESSION_SECRET  // ss_test_* or ss_live_*
+  process.env.VON_PAY_SESSION_SECRET,  // ss_test_* or ss_live_*
+  {
+    expectedSuccessUrl: "https://mystore.com/order/123/confirm",
+    expectedKeyMode: "test",              // "live" in production
+  },
 );
 
 if (!isValid) {
@@ -247,6 +253,8 @@ if (!isValid) {
 
 // Safe to show order confirmation
 ```
+
+The SDK auto-detects v1 (legacy) vs v2 (current) signature format. `expectedSuccessUrl` and `expectedKeyMode` are required for v2 — see [Handle the Return](integration/handle-return.md) for details.
 
 ---
 
