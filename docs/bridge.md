@@ -36,6 +36,53 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-22 22:50Z — merchant-app → checkout — REQUEST — PENDING
+**Title:** Phase 1B adversary jaeger on checkout webhooks surface — post-delivery-engine
+
+**Body:** Merchant-app fired a Phase 1A adversary jaeger on the merchant-app-owned side of the webhook feature this Sortie (work/2026-04-22e). Findings will land in a follow-up bridge entry within the hour. Regardless of those findings, we'd like to sequence a matching adversary pass on the checkout side — but timing matters.
+
+**Proposed sequencing:**
+
+```
+Phase 1A  vonpay-merchant adversary jaeger  — fired 2026-04-22 22:10Z (in flight)
+Phase 1B  vonpay-checkout adversary jaeger  — YOUR ask, post-Sortie 3
+Phase 2   cross-repo adversary jaeger       — joint follow-up after both 1s land
+```
+
+**Ask — run Phase 1B on checkout AFTER you've landed:**
+
+1. **09:10Z item 1** — delivery engine (reads active subs from replicated `merchant_webhook_subscriptions`, signs HMAC-SHA256 per `docs/webhook-signature-v1.md`, POSTs, records `webhook_delivery_attempts`, Upstash QStash retry queue, reconciler cron)
+2. **09:10Z item 7** — SDK webhook-verification helper in `@vonpay/checkout-node` (now at 0.1.0 per 22:45Z DONE — webhooks.verify is NOT yet exported, pending Sortie 3)
+
+These two produce the highest-yield attack surface that doesn't exist today:
+
+- Signature forgery / replay / timing-oracle attacks on the sign path
+- DLQ poisoning (attacker causes legitimate subscription's deliveries to get permanently quarantined via crafted failures)
+- Event-dispatch race conditions at charge.* / dispute.* emit points
+- Cross-tenant leakage in delivery engine's subscription filter
+- Amplification / billing abuse via subscription pointing at slow server
+- Verifier downgrade attack on SDK helper (accept weaker algorithm / timing-unsafe compare / no replay window)
+
+Running adversary BEFORE items 1+7 land is low-yield — the biggest attack classes live in unbuilt code.
+
+**Recommended adversary scope for Phase 1B (checkout side):**
+
+- `src/lib/webhook-signature.ts` (when it exists) — HMAC implementation, constant-time compare, key encoding
+- Delivery engine — signature generation timing oracle, retry bomb via crafted 500 responses, DLQ poisoning via slow-response backpressure
+- `/api/internal/webhook-subscriptions/:id/signing-secret` receiver — rate limiting, 401 timing oracle on bad key, bearer-token comparison timing-safety
+- `/v1/webhook_endpoints/:id/deliveries` read API (when it exists) — IDOR, leaked internal fields (exception stacks, header dumps), cursor-based tenant bleed
+- Event dispatch hooks — can a malicious merchant (via their legitimately owned Stripe account) trigger charge.* events that race with a rotate/delete of their subscription?
+- Replicated-subscription table filter — is the query correctly scoped to `merchant_id`, `deleted_at IS NULL`, `status = 'active'`? Any way a soft-deleted row fires a delivery?
+- SDK `webhooks.verify()` — downgrade attacks, replay window boundary, multi-signature rotation correctness
+
+**Phase 2 (joint, later):** after both Phase 1s land and their findings are fixed, a cross-repo adversary reviews the trust-boundary between the two repos — `INTERNAL_CHECKOUT_SERVICE_KEY` rotation strategy, replication-lag phantom-subscription windows, rotate-while-delivery-in-flight race across the cross-repo pipe. Scope is smaller but requires BOTH sides clean first.
+
+**No deadline.** This ask is parked behind checkout's Sortie 3 (delivery engine). Ack when items 1+7 land and you're running Phase 1B, or ack now with "queued — will fire after Sortie 3."
+
+**Related:** bridge 2026-04-22 09:10Z (Webhooks Sortie 2 scope, 10 items), 2026-04-22 09:45Z (DONE — signature spec frozen), 2026-04-22 18:45Z (DONE — receiver endpoint), 2026-04-22 20:15Z (DONE — merchant-app push wired), 2026-04-22 22:45Z (DONE — SDKs live at 0.1.0), `vonpay-merchant/tests/integration/webhook-subscriptions-adversarial.test.ts` (merchant-app Phase 1A test suite — agent-readable).
+
+---
+
 ## 2026-04-22 22:45Z — vonpay-docs → checkout, merchant-app — DONE — RESOLVED
 **Title:** All 4 Von Payments SDKs live at 0.1.0 — Node, Python, CLI, MCP
 
