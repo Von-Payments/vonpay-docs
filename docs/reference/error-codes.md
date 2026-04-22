@@ -102,3 +102,97 @@ Every response includes `X-Request-Id`. When contacting support, include this ID
 ```
 X-Request-Id: a1b2c3d4e5f6
 ```
+
+---
+
+## Per-code reference
+
+Each error code emitted in a response body (`docs` field) links to its section below. The stub anchors exist today so `docs:` URLs always resolve to a real page; full content (fix recipes, common causes, SDK behavior) lands next Sortie as part of the webhook launch documentation sweep.
+
+### auth_missing_bearer
+
+**HTTP:** 401. The request did not include an `Authorization: Bearer <key>` header. Add the header with your `vp_sk_*` or `vp_pk_*` key.
+
+### auth_invalid_key
+
+**HTTP:** 401. The API key is malformed, unknown, or has been revoked. Check the prefix (`vp_sk_test_`, `vp_sk_live_`, `vp_pk_test_`, `vp_pk_live_`) and confirm the key exists in `/dashboard/developers/api-keys`. If you just rotated, double-check the grace window hasn't expired.
+
+### auth_key_type_forbidden
+
+**HTTP:** 403. You used a test-mode key against a live endpoint, a live key against a sandbox endpoint, or a publishable key against a secret-only endpoint (e.g. `GET /v1/sessions/:id`). Match the key type to the operation.
+
+### auth_merchant_inactive
+
+**HTTP:** 403. The merchant account has been disabled or suspended. Check `/dashboard` for status banners; contact support if unexpected.
+
+### auth_service_unavailable
+
+**HTTP:** 503. The authentication service is temporarily unavailable. This is retriable — the SDK auto-retries with backoff.
+
+### session_not_found
+
+**HTTP:** 404. The session ID does not exist. Sessions are scoped to the merchant; you cannot look up another merchant's session with your key. Confirm the ID was created with the same key mode you're now querying with.
+
+### session_expired
+
+**HTTP:** 410. The session has expired (default 30-minute TTL). Create a new session.
+
+### session_wrong_state
+
+**HTTP:** 409. The session is in a state that forbids this operation (e.g. the session already `succeeded` and cannot be cancelled). Read the response body — the `fix` field describes the allowed state transitions.
+
+### session_integrity_error
+
+**HTTP:** 409. Session data integrity check failed. This is rare and usually indicates a race condition between webhook delivery and a follow-up API call. Retry after the webhook delivery settles.
+
+### validation_error
+
+**HTTP:** 400. The request body failed schema validation. The response `error` field contains a human-readable message from the validator, including the path to the bad field.
+
+### validation_missing_field
+
+**HTTP:** 400. A required field is missing. See [Create a Session](../integration/create-session.md) for the required fields.
+
+### validation_invalid_amount
+
+**HTTP:** 400. Amount is not a positive integer, is zero, or exceeds the 99,999,999 maximum. Remember: amounts are in **minor units** — `1499` = $14.99, not $1,499.
+
+### merchant_not_configured
+
+**HTTP:** 400. The merchant is missing required configuration for this operation — usually payment-provider credentials (Stripe account not boarded, Gr4vy binding not provisioned, etc.). Check `/ops/applications/[id]` or contact support.
+
+### rate_limit_exceeded
+
+**HTTP:** 429. Too many requests. Retry after the `Retry-After` interval. SDK auto-retries up to `maxRetries` times.
+
+### provider_unavailable
+
+**HTTP:** 502. Upstream payment provider (Stripe, Gr4vy, etc.) is not responding. Retriable — the SDK auto-retries with backoff.
+
+### internal_error
+
+**HTTP:** 500. Unexpected server error. Capture the `X-Request-Id` and contact support.
+
+### webhook_missing_signature
+
+**HTTP:** 401. Webhook request did not include the `X-VonPay-Signature` header. Only relevant if your endpoint rejects the delivery — the error is emitted by your code, not by Von Payments.
+
+### webhook_invalid_signature
+
+**HTTP:** 401. Webhook signature does not match the expected HMAC. Check you're HMAC'ing the **raw** request body (not the parsed JSON), using the right secret (merchant API key for session webhooks; subscription secret for v2). See [Webhook Signature Verification](../integration/webhook-verification.md).
+
+### webhook_not_configured
+
+**HTTP:** 400. No webhook endpoint is configured for this merchant. Register one at `/dashboard/developers/webhooks`.
+
+### origin_forbidden
+
+**HTTP:** 403. The request origin is not in the merchant's allowed-origins list. Add the origin at `/dashboard/branding` (checkout origin allowlist).
+
+### transaction_verification_failed
+
+**HTTP:** 400. Transaction could not be verified with the payment processor. Usually a processor-side reconciliation failure; retriable once the processor clears.
+
+### unsupported_media_type
+
+**HTTP:** 415. The `Content-Type` header is missing or not `application/json`. Set `Content-Type: application/json` on all POST/PUT requests.
