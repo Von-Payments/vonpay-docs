@@ -7,12 +7,22 @@ const sidebars: SidebarsConfig = {
     'how-it-works',
     {
       type: 'category',
+      label: 'Concepts',
+      items: [
+        'concepts/vora',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Integration',
       items: [
         'integration/create-session',
         'integration/redirect-to-checkout',
         'integration/handle-return',
         'integration/webhooks',
+        'integration/webhook-events',
+        'integration/webhook-verification',
+        'integration/webhook-secrets',
         'integration/ai-agents',
       ],
     },
@@ -35,6 +45,7 @@ const sidebars: SidebarsConfig = {
         'reference/api',
         'reference/session-object',
         'reference/error-codes',
+        'reference/api-keys',
         'reference/security',
         'reference/versioning',
         'reference/test-cards',
@@ -47,7 +58,9 @@ const sidebars: SidebarsConfig = {
       label: 'Guides',
       items: [
         'guides/test-in-sandbox',
+        'guides/sandbox',
         'guides/going-live',
+        'guides/go-live-checklist',
       ],
     },
   ],

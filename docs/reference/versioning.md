@@ -14,12 +14,6 @@ Set the `Von-Pay-Version` request header to pin your integration to a specific A
 Von-Pay-Version: 2026-04-14
 ```
 
-Every response includes a `Von-Pay-Latest-Version` header indicating the most recent version available:
-
-```
-Von-Pay-Latest-Version: 2026-04-14
-```
-
 ## Default Behavior
 
 If the `Von-Pay-Version` header is omitted, the API uses your account's default version. This is the version that was current when your account was created.
@@ -31,8 +25,8 @@ All SDKs accept an `apiVersion` configuration option that sets the version heade
 **Node.js:**
 
 ```typescript
-const vonpay = new VonPay({
-  apiKey: "vp_key_live_xxx",
+const vonpay = new VonPayCheckout({
+  apiKey: "vp_sk_live_xxx",
   apiVersion: "2026-04-14",
 });
 ```
@@ -60,6 +54,52 @@ Pin your SDK to a specific version to avoid unexpected behavior when new version
 - Changing field types
 - Changing default behavior
 - Removing endpoints
+
+## Deprecation Policy
+
+Von Payments commits to a predictable deprecation window so integrations have time to migrate before anything breaks.
+
+### Lifecycle stages
+
+| Stage | What it means for your integration |
+|---|---|
+| **GA** (general availability) | Fully supported. No action required. |
+| **Deprecated** | Still works, but scheduled for removal. A new version number exists; plan to migrate. We emit a `Deprecation:` response header on every affected endpoint. |
+| **Sunset** | Endpoint or field responds with `410 Gone` (or returns the replacement value). Deprecated code paths are removed. |
+
+### Timeline guarantees
+
+- **Minimum 6 months** between deprecation and sunset for any endpoint or required request field.
+- **Minimum 3 months** between deprecation and sunset for optional fields and response-only fields.
+- **Minimum 12 months** before any authentication change (key prefix, signing algorithm, header format).
+- **No silent removals.** Every breaking change ships in a dated version and is announced via:
+  - The `Deprecation:` and `Sunset:` response headers on affected endpoints
+  - Release notes in the changelog
+  - Email to the primary contact on every account using the deprecated surface
+
+### Response headers during deprecation
+
+When you call a deprecated endpoint, the response includes:
+
+```
+Deprecation: Sun, 15 Nov 2026 00:00:00 GMT
+Sunset: Wed, 15 May 2027 00:00:00 GMT
+Link: <https://docs.vonpay.com/reference/versioning>; rel="deprecation"
+```
+
+- `Deprecation` — when we announced the deprecation (a past date once it's live)
+- `Sunset` — when the endpoint stops working (future date; ≥6 months out for required endpoints)
+- `Link` — documentation URL describing the replacement
+
+Set `Deprecation: true` monitoring on your HTTP client in production so you find out about deprecations before sunset hits.
+
+### Dated version support
+
+- **Current version** — GA, fully supported
+- **Previous version** — GA, fully supported (we keep the last GA version live indefinitely)
+- **N-2 and older** — deprecated; minimum 12 months between a version being superseded and being sunset
+
+Pin your SDK to a specific `apiVersion` (see [SDK Pinning](#sdk-pinning)) so a new default version doesn't change behavior for your integration until you explicitly bump.
 
 ## Changelog
 

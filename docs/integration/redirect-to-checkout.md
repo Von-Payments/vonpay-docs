@@ -13,8 +13,8 @@ The browser snippet creates the session and redirects in one step:
 ```html
 <script src="https://checkout.vonpay.com/vonpay.js"></script>
 <script>
-  VonPayCheckout.configure({ apiKey: "vp_sk_live_xxx" });
-  VonPayCheckout.checkout({
+  VonPay.configure({ apiKey: "vp_pk_live_xxx" });
+  VonPay.checkout({
     amount: 1499,
     currency: "USD",
     country: "US",
@@ -22,6 +22,8 @@ The browser snippet creates the session and redirects in one step:
   });
 </script>
 ```
+
+`vonpay.js` requires a publishable key (`vp_pk_*`). Secret keys are rejected — see [vonpay.js](../sdks/vonpay-js.md) for details.
 
 ## Option B: Server-side redirect
 

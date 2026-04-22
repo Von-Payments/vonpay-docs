@@ -69,19 +69,25 @@ No authentication required.
 
 | Endpoint | Limit |
 |----------|-------|
-| `POST /v1/sessions` | 10 requests/minute per IP |
-| `POST /api/checkout/init` | 20 requests/minute per IP |
-| `POST /api/webhooks/provider` | 100 requests/minute |
+| `POST /v1/sessions` | 10/min per IP, 30/min per API key |
+| `GET /v1/sessions/:id` | 30/min per IP |
+| `POST /api/checkout/init`, `/api/checkout/complete` | 20/min per IP |
+| `POST /api/webhooks/*` (inbound provider) | 100/min per IP |
 
-Rate-limited responses return `429` with a `Retry-After` header.
+See [Rate Limits](../reference/rate-limits.md) for the full bucket list.
+
+Rate-limited responses return `429` with `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers.
 
 ## Error Format
 
-All errors return JSON:
+All errors return JSON with a flat envelope:
 
 ```json
 {
-  "error": "Human-readable error message"
+  "error": "Human-readable error message",
+  "code": "validation_invalid_amount",
+  "fix": "Amount must be a positive integer in minor units (cents). 1499 = $14.99",
+  "docs": "https://docs.vonpay.com/integration/create-session#required-fields"
 }
 ```
 

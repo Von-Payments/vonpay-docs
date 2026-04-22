@@ -61,6 +61,8 @@ Idempotency-Key: <unique-key>   (optional, recommended)
 }
 ```
 
+The `POST /v1/sessions` response is deliberately minimal — just the session ID, the checkout URL to redirect the buyer to, and the session expiry. Processor selection (Stripe, Adyen, etc.) happens server-side inside Von Payments and is not exposed on the merchant API. See [Vora — Payment Routing](../concepts/vora.md) for why.
+
 ## Session Expiry
 
 Sessions expire **30 minutes** after creation. If the buyer hasn't completed payment by then, the session status becomes `expired` and the checkout page shows an error.

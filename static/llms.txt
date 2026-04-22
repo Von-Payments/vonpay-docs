@@ -15,14 +15,59 @@
 All merchant API calls require a Bearer token:
 
 ```
-Authorization: Bearer vp_key_live_xxx
+Authorization: Bearer vp_sk_live_xxx
 ```
+
+### Key Types
+
+- **Publishable keys** (`vp_pk_*`) — safe for browser code, can only create sessions
+- **Secret keys** (`vp_sk_*`) — server-only, full API access
+- **Legacy keys** (`vp_key_*`) — treated as secret, deprecated
+
+## API Versioning
+
+Include `Von-Pay-Version: 2026-04-14` header to pin a version. If omitted, the current version is used.
+
+## Self-Healing Errors
+
+All error responses include structured fields for programmatic handling:
+
+```json
+{
+  "error": "Human-readable message",
+  "code": "auth_missing_bearer",
+  "fix": "Include an Authorization: Bearer <your-api-key> header",
+  "docs": "https://docs.vonpay.com/reference/security#authentication"
+}
+```
+
+## Key Rotation
+
+Secret keys can be rotated without downtime. When a key is rotated, the previous key enters a grace window (default 24h) during which both keys authenticate. After grace closes, the previous key returns `401` with `code: auth_key_expired` — distinct from `auth_invalid_key` so SDKs can detect rotation and refresh instead of failing the payment. If a publisher force-deactivates a key mid-rotation (`is_active=false` while grace/expiry metadata is set), that also returns `auth_key_expired` — the deactivation is treated as an accelerated rotation endpoint, not a plain revocation. Plain deactivation (`is_active=false` with no rotation metadata) returns `auth_invalid_key`. See https://docs.vonpay.com/reference/security#key-rotation for the full rotation flow.
+
+## Dry-Run Validation
+
+Validate a session request without creating it:
+
+```
+POST /v1/sessions?dry_run=true
+→ 200 { "valid": true, "warnings": [] }
+→ 400 { "valid": false, "errors": [...] }
+```
+
+## Machine Discovery
+
+```
+GET /.well-known/vonpay.json
+```
+
+Returns API version, endpoints, docs URLs, SDK package names.
 
 ## Create a Checkout Session
 
 ```
 POST /v1/sessions
-Authorization: Bearer vp_key_live_xxx
+Authorization: Bearer vp_sk_live_xxx
 Content-Type: application/json
 Idempotency-Key: optional-dedup-key
 
@@ -82,12 +127,15 @@ Response (201):
 - `amount` is the source of truth for charging. `lineItems` are display-only.
 - Sessions expire after 30 minutes by default
 - Idempotency: pass `Idempotency-Key` header to prevent duplicate sessions on retries
+- **Sandbox vs live is decided at session creation** from the authenticating key's merchant config (internal `is_sandbox` flag). It is never read from the request body, and it is frozen for the lifetime of the session — subsequent reads and webhook reconciliation honor the same mode. There is no `sandbox` or `mode=test|live` field on the request body.
 
 ## Get Session Status
 
+Requires a secret key (`vp_sk_*`). Publishable keys receive 403.
+
 ```
 GET /v1/sessions/vp_cs_live_k7x9m2n4p3abcdef
-Authorization: Bearer vp_key_live_xxx
+Authorization: Bearer vp_sk_live_xxx
 ```
 
 Response:
@@ -154,6 +202,44 @@ def verify(session, status, amount, currency, transaction_id, sig, secret):
     return hmac.compare_digest(sig, expected)
 ```
 
+## Verify Outbound Webhook Signature
+
+When Von Payments POSTs a webhook event to your registered endpoint, the request carries an `x-vonpay-signature` header — **a separate HMAC scheme** from the return URL signature above. Use it to verify the payload actually came from us.
+
+Header shape:
+
+```
+x-vonpay-signature: t=<unix-seconds>,v1=<hex-hmac>
+```
+
+During a signing-secret rotation, multiple `v1=` entries may appear (at most 2). Accept if any match.
+
+HMAC input: `t + "." + raw_request_body`. Key: the raw `whsec_*` signing secret you got when registering the endpoint (used as UTF-8 bytes; do not base64-decode).
+
+```javascript
+// Node.js — full verifier, timing-safe, rotation-aware
+import crypto from "crypto";
+function verifyWebhook(rawBody, headerValue, secret) {
+  if (!headerValue) return false;
+  const parts = headerValue.split(",").map(p => p.trim());
+  const tPart = parts.find(p => p.startsWith("t="));
+  if (!tPart) return false;
+  const t = parseInt(tPart.slice(2), 10);
+  const now = Math.floor(Date.now() / 1000);
+  if (now - t > 300 || t - now > 30) return false;  // 5 min past, 30 sec future
+  const v1s = parts.filter(p => p.startsWith("v1="));
+  if (v1s.length === 0 || v1s.length > 2) return false;
+  const expected = Buffer.from(crypto.createHmac("sha256", secret).update(`${t}.${rawBody}`).digest("hex"), "utf8");
+  for (const part of v1s) {
+    const cand = Buffer.from(part.slice(3), "utf8");
+    try { if (crypto.timingSafeEqual(cand, expected)) return true; } catch {}
+  }
+  return false;
+}
+```
+
+Reject with 400 on stale/future timestamp. Reject with 401 on signature mismatch or malformed header. See https://docs.vonpay.com/reference/webhooks#verification (or `docs/webhook-signature-v1.md` in source) for the full spec including rotation semantics.
+
 ## Health Check
 
 ```
@@ -161,6 +247,15 @@ GET /api/health
 ```
 
 No auth required. Returns `200` when healthy, `503` when degraded.
+
+## Internal Routes (not for merchant integration)
+
+These exist only so the hosted checkout page can call back into the checkout service. They are not part of the merchant API — merchants should not call them directly.
+
+- `POST /api/checkout/init` — origin-validated; initializes payment embed for a session
+- `POST /api/checkout/complete` — origin-validated; finalizes session after provider success
+- `POST /api/checkout/client-error` — origin-validated; receives client-side error reports from the hosted page. Body capped at 4 KB — larger bodies return `413 { ok: false, error: "Payload too large" }`.
+- `POST /api/csp-report` — unauthenticated; receives browser-emitted Content-Security-Policy violation reports. Browsers send `application/csp-report`; no auth envelope exists for these reports so the route is origin-checked and rate-limited via the shared `clientError` bucket. Oversized or malformed bodies are rejected.
 
 ## Rate Limits
 
@@ -185,24 +280,26 @@ Every response includes `X-Request-Id` header for debugging.
 |------|---------|
 | 400 | Invalid request body |
 | 401 | Authentication failed |
+| 403 | Forbidden — secret key required |
 | 404 | Session not found |
 | 409 | Session in wrong state |
 | 410 | Session expired |
 | 429 | Rate limited |
 | 500 | Server error |
+| 503 | Auth service unavailable (`code: auth_service_unavailable`) — retry with exponential backoff. |
 
 ## SDKs
 
-### Node.js (@vonpay/node)
+### Node.js (@vonpay/checkout-node)
 
 ```bash
-npm install @vonpay/node
+npm install @vonpay/checkout-node
 ```
 
 ```typescript
-import { VonPay } from "@vonpay/node";
+import { VonPayCheckout } from "@vonpay/checkout-node";
 
-const vonpay = new VonPay("vp_key_live_xxx");
+const vonpay = new VonPayCheckout("vp_sk_live_xxx");
 
 // Create session
 const session = await vonpay.sessions.create({
@@ -213,18 +310,22 @@ const session = await vonpay.sessions.create({
 });
 // Redirect buyer to session.checkoutUrl
 
-// Check status
+// Check status (secret key only)
 const status = await vonpay.sessions.get("vp_cs_live_xxx");
 
-// Verify return signature
-const isValid = VonPay.verifyReturnSignature({
-  session: url.searchParams.get("session"),
-  status: url.searchParams.get("status"),
-  amount: url.searchParams.get("amount"),
-  currency: url.searchParams.get("currency"),
-  transaction_id: url.searchParams.get("transaction_id"),
-  sig: url.searchParams.get("sig"),
-}, process.env.VON_PAY_SESSION_SECRET);
+// Verify return signature (v2 format; auto-detects v1 legacy)
+const isValid = VonPayCheckout.verifyReturnSignature(
+  {
+    session: url.searchParams.get("session"),
+    status: url.searchParams.get("status"),
+    amount: url.searchParams.get("amount"),
+    currency: url.searchParams.get("currency"),
+    transaction_id: url.searchParams.get("transaction_id"),
+    sig: url.searchParams.get("sig"),
+  },
+  process.env.VON_PAY_SESSION_SECRET,
+  { expectedSuccessUrl: "https://mystore.com/confirm", expectedKeyMode: "live" },
+);
 ```
 
 ### Browser (vonpay.js)
@@ -232,7 +333,7 @@ const isValid = VonPay.verifyReturnSignature({
 ```html
 <script src="https://checkout.vonpay.com/vonpay.js"></script>
 <script>
-  VonPay.configure({ apiKey: "vp_key_live_xxx" });
+  VonPay.configure({ apiKey: "vp_pk_live_xxx" });
   VonPay.checkout({
     amount: 1499,
     currency: "USD",

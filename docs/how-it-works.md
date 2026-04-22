@@ -71,6 +71,12 @@ When the buyer arrives at the checkout URL, they see:
 - **Session tokens** — The session ID in the URL is a 10-character random token. It cannot be guessed or reused.
 - **HTTPS required** — All API calls and return URLs must use HTTPS (localhost exempt in sandbox).
 
+## Payment Routing
+
+Von Payments runs a gateway-orchestration layer called **Vora**. When you call `POST /v1/sessions`, Vora selects the underlying payment processor based on the merchant's configuration, processor health, and routing rules — all server-side. The merchant API does not expose which processor handled the session; your integration is identical regardless of routing decisions.
+
+See [Vora — Payment Routing](concepts/vora.md) for the full concept.
+
 ## What You Don't Need to Do
 
 - Build a payment form — we handle it
@@ -78,3 +84,4 @@ When the buyer arrives at the checkout URL, they see:
 - Integrate individual payment methods — they're auto-detected and rendered
 - Manage 3D Secure — handled automatically when required
 - Build mobile-specific flows — the checkout page is responsive
+- Pick a payment processor — Vora routes for you

@@ -2,9 +2,9 @@
 sidebar_position: 1
 ---
 
-# Test in Sandbox
+# Test Locally & in Sandbox
 
-Test the full checkout flow end-to-end before processing real payments.
+Test the full checkout flow end-to-end before processing real payments. The examples below use `http://localhost:3001` for running the checkout service locally; replace with `https://checkout.vonpay.com` to hit the hosted sandbox without running anything locally.
 
 ## Setup
 
@@ -39,12 +39,17 @@ Copy the `checkoutUrl` from the response and open it in your browser. You should
 
 Use these test card numbers in sandbox mode:
 
-| Card | Number | Expiry | CVC |
-|------|--------|--------|-----|
-| Visa (success) | `4111 1111 1111 1111` | Any future date | Any 3 digits |
-| Visa (decline) | `4000 0000 0000 0002` | Any future date | Any 3 digits |
-| Mastercard | `5555 5555 5555 4444` | Any future date | Any 3 digits |
-| 3D Secure | `4000 0000 0000 3220` | Any future date | Any 3 digits |
+See [Test Cards](../reference/test-cards.md) for the canonical list. Common ones:
+
+| Card | Number | Outcome |
+|------|--------|---------|
+| Visa (success) | `4242 4242 4242 4242` | Happy path |
+| Visa (decline) | `4000 0000 0000 0002` | Generic decline |
+| Visa (3D Secure) | `4000 0027 6000 3184` | 3DS challenge flow |
+| Visa (insufficient funds) | `4000 0000 0000 9995` | Specific decline code |
+| Mastercard | `5555 5555 5555 4444` | Happy path |
+
+Any future expiry date and any 3-digit CVC work. For Amex, CVC is 4 digits.
 
 > Note: Exact test card numbers may vary depending on the payment processor configuration. Check your processor's sandbox documentation for the full list.
 

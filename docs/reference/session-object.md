@@ -17,6 +17,8 @@ The ID is a 10-character random string. It cannot be guessed.
 
 ## Fields
 
+### Core fields
+
 | Field | Type | Always Present | Description |
 |-------|------|----------------|-------------|
 | `id` | string | Yes | Session ID |
@@ -34,6 +36,10 @@ The ID is a 10-character random string. It cannot be guessed.
 | `createdAt` | string | Yes | ISO 8601 creation timestamp |
 | `updatedAt` | string | Yes | ISO 8601 last update timestamp |
 | `expiresAt` | string | Yes | ISO 8601 expiry timestamp |
+
+### Payment routing (Vora)
+
+Processor selection (Stripe, Adyen, NMI, etc.) happens server-side inside Von Payments. The merchant API does **not** expose which processor was used — neither `POST /v1/sessions` nor `GET /v1/sessions/:id` returns processor identifiers. Your integration is identical regardless of which processor fires the charge. See [Vora — Payment Routing](../concepts/vora.md) for context.
 
 ## Status Lifecycle
 

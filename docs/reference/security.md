@@ -8,6 +8,8 @@ sidebar_position: 4
 
 API requests use Bearer token authentication:
 
+### Key Types {#key-types}
+
 ```
 Authorization: Bearer vp_sk_live_xxx
 ```
@@ -16,6 +18,15 @@ Authorization: Bearer vp_sk_live_xxx
 - **Live keys** (`vp_sk_live_xxx`) — production, real payments
 
 Keep your API key secret. If compromised, contact Von Payments to rotate it.
+
+### Key Rotation {#key-rotation}
+
+Secret keys can be rotated without downtime. When a key is rotated, the previous key enters a **24-hour grace window** during which both keys authenticate. After the grace window closes, the previous key returns `401` with `code: auth_key_expired` — distinct from `auth_invalid_key` so SDKs can detect rotation and refresh instead of failing the payment.
+
+- **Plain deactivation** (`is_active=false` with no rotation metadata) returns `auth_invalid_key`
+- **Force-deactivation mid-rotation** (flipping `is_active=false` while grace/expiry metadata is set) returns `auth_key_expired` — the deactivation is treated as an accelerated rotation, not a plain revocation
+
+Rotate keys via `/dashboard/developers/api-keys`. The UI shows the new plaintext exactly once at creation — store it immediately.
 
 ## HMAC Return URL Signatures
 
@@ -103,33 +114,40 @@ Von-Pay-Version: 2026-04-14
 - If omitted, your account's default API version is used
 - Pin this header to a specific date to prevent breaking changes when the API evolves
 - New versions are announced in the changelog before becoming the default
-- The version date is returned in the `Von-Pay-Version` response header
 
 ## Webhook Signature Verification
 
-Webhook payloads are signed using your **API key** as the HMAC secret, not a separate webhook secret. The signature is included in the `Von-Pay-Signature` request header:
+Session-level webhooks are signed with HMAC-SHA256 using your **merchant API key** as the secret. The signature arrives in the `X-VonPay-Signature` request header (lowercase hex, no prefix):
 
 ```
-Von-Pay-Signature: sha256=<hex-encoded-hmac>
+X-VonPay-Signature: a1b2c3d4...
+X-VonPay-Timestamp: 2026-04-22T09:30:00.000Z
 ```
 
 To verify:
 
-1. Read the raw request body (before JSON parsing)
-2. Compute `HMAC-SHA256(key: your_api_key, data: raw_body)`
-3. Compare the result with the signature in the header using a timing-safe comparison
+1. Capture the raw request body **as bytes** before any JSON parsing
+2. Compute `HMAC-SHA256(key: your_api_key, data: raw_body)` and hex-encode
+3. Timing-safe compare with the `X-VonPay-Signature` value — wrap in try/catch; a length-mismatched hex input throws and must be treated as no-match
+4. Reject if `X-VonPay-Timestamp` is more than **±5 minutes** from now (symmetric window — matches the SDK's `constructEvent` replay check)
 
 ```typescript
 import crypto from "crypto";
 
-function verifyWebhookSignature(rawBody: string, signature: string, apiKey: string): boolean {
+function verifyWebhookSignature(rawBody: Buffer | string, signature: string, apiKey: string): boolean {
   const expected = crypto.createHmac("sha256", apiKey).update(rawBody).digest("hex");
-  const received = signature.replace("sha256=", "");
-  return crypto.timingSafeEqual(Buffer.from(received, "hex"), Buffer.from(expected, "hex"));
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex"));
+  } catch {
+    // length mismatch or non-hex signature — reject
+    return false;
+  }
 }
 ```
 
-> **Important:** The webhook signing secret is your API key (`vp_sk_live_xxx` or `vp_sk_test_xxx`), not the session signing secret (`ss_live_*` / `ss_test_*`). The session signing secret is only used for return URL signatures.
+> **Important:** The webhook signing secret for session-level webhooks is your API key (`vp_sk_live_xxx` or `vp_sk_test_xxx`), not the session signing secret (`ss_live_*` / `ss_test_*`). The session signing secret is only used for return URL signatures.
+>
+> **Webhooks v2 (merchant-subscribed webhooks, launching)** use a different header format (`x-vonpay-signature: t=<ts>,v1=<hmac>`) and a per-subscription signing secret. See [Webhook Signature Verification](../integration/webhook-verification.md).
 
 ## Reporting Vulnerabilities
 
