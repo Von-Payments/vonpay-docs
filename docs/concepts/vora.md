@@ -22,20 +22,9 @@ From your code, all three look identical. `POST /v1/sessions` returns a `checkou
 
 ## What changes in your integration
 
-**Nothing in request shape.** Session creation is unchanged.
+**Nothing.** Session creation is unchanged, session retrieval is unchanged, return-signature verification is unchanged. Vora is entirely server-side inside Von Payments — none of its state is exposed on the merchant API.
 
-**One thing in the response shape.** Session responses now include provider metadata so you can diagnose issues, report on processor activity, and surface useful context in dashboards:
-
-| Field | Type | Description |
-|---|---|---|
-| `providerId` | string | The Von Payments internal ID of the processor row that handled (or will handle) this payment. |
-| `providerMerchantId` | string | The processor-side merchant ID (e.g. Stripe `acct_...`, Adyen merchant account). |
-| `providerPublishableKey` | string | Publishable key for the processor if the checkout page needs to load the processor's client-side SDK (typically set on init response only). |
-| `providerAccountId` | string | Processor-specific account ID for reporting / reconciliation. |
-| `type` | string | Processor family: `stripe_connect_direct`, `gr4vy`, `vonpay_router`, etc. |
-| `circuits` | object | Health snapshot of the processor circuit at the moment the session was served (present on `GET /v1/health`). |
-
-These fields are read-only. Ignore them if you don't need them — they do not affect the buyer flow.
+Processor selection state (which processor handled a charge, the processor-side merchant ID, etc.) lives in internal Von Payments systems and surfaces only to merchants through the Dashboard and Ops tooling — not through the public API.
 
 ## What you don't need to do
 
@@ -46,11 +35,7 @@ These fields are read-only. Ignore them if you don't need them — they do not a
 
 ## When you might care which processor fired
 
-You usually don't. The only time it matters:
-
-- **Reporting / reconciliation** — you want to match Von Payments transactions against your processor-side statements. Use `providerAccountId` + `transactionId`.
-- **Support escalation** — a buyer disputes a charge and their bank statement shows a specific processor name. `providerId` tells you which processor row was used.
-- **Webhooks** — session-level webhooks from Von Payments are normalised. If you also receive processor-native webhooks, use `providerId` to correlate.
+You usually don't. If you need processor-side reconciliation (matching Von Payments transactions against a processor statement) or support escalation context, contact support with your session ID — we can surface the processor-side transaction ID for that specific session. There is no API surface for bulk processor-level reporting on the merchant side today.
 
 ## Related
 

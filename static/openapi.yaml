@@ -1,20 +1,103 @@
-openapi: 3.1.0
+# Von Payments Checkout API — canonical spec
+# SDK and documentation generation source of truth
+# Last updated: 2026-04-14
+openapi: "3.1.0"
 info:
-  title: Von Pay Checkout API
+  title: Von Payments Checkout API
+  version: "2026-04-14"
   description: |
-    API for Von Payments hosted checkout page. Merchants create checkout sessions
-    and redirect buyers to the hosted payment page. The API handles session
-    lifecycle, payment orchestration, and webhook processing.
-  version: 0.1.0
+    Checkout session management for Von Payments.
+
+    ## Authentication
+
+    All authenticated endpoints require a Bearer token in the `Authorization` header.
+    Von Payments issues two key types, each with test and live variants:
+
+    | Prefix         | Type        | Scope                              |
+    |----------------|-------------|-------------------------------------|
+    | `vp_sk_test_`  | Secret      | Full API access (test mode)        |
+    | `vp_sk_live_`  | Secret      | Full API access (live mode)        |
+    | `vp_pk_test_`  | Publishable | Create sessions only (test mode)   |
+    | `vp_pk_live_`  | Publishable | Create sessions only (live mode)   |
+
+    Secret keys (`vp_sk_*`) grant full access. Publishable keys (`vp_pk_*`) can only
+    create checkout sessions — they are rejected by endpoints that read session data.
+
+    ## Session State Machine
+
+    ```
+    pending ──→ succeeded   (payment captured)
+    pending ──→ failed      (payment failed)
+    pending ──→ expired     (TTL exceeded)
+    ```
+
+    Once a session leaves `pending`, it is terminal and cannot transition again.
+
+    ## Rate Limits
+
+    Requests are rate-limited per merchant key. Current buckets:
+
+    | Endpoint                  | Limit            |
+    |---------------------------|------------------|
+    | `POST /v1/sessions`       | 10 req / 60 s    |
+    | `GET /v1/sessions/:id`    | 30 req / 60 s    |
+
+    Rate limit state is returned in response headers:
+    - `X-RateLimit-Limit` — bucket capacity
+    - `X-RateLimit-Remaining` — remaining requests in the current window
+    - `X-RateLimit-Reset` — UTC epoch seconds when the window resets
+
+    When the limit is exceeded, the API returns `429 Too Many Requests` with error code
+    `rate_limit_exceeded`.
+
+    ## Error Handling
+
+    All error responses share a consistent JSON envelope:
+
+    ```json
+    {
+      "error": "Human-readable message",
+      "code": "error_code",
+      "fix": "Actionable suggestion for the developer",
+      "docs": "https://docs.vonpay.com/..."
+    }
+    ```
+
+    See the `ErrorResponse` schema for the full list of error codes.
+
+    ## Webhooks
+
+    Von Payments delivers webhook events via HTTPS POST to your configured endpoint.
+    Each request includes:
+
+    | Header                | Description                                  |
+    |-----------------------|----------------------------------------------|
+    | `X-VonPay-Signature`  | HMAC-SHA256 signature of the request body    |
+    | `X-VonPay-Timestamp`  | ISO 8601 timestamp of when the event fired   |
+    | `Content-Type`        | `application/json`                           |
+    | `User-Agent`          | `VonPay-Webhook/1.0`                         |
+
+    Verify the signature by computing `HMAC-SHA256(merchant API key (vp_sk_*), raw_body)` and
+    comparing it to the `X-VonPay-Signature` header value.
+
+    > **Note:** The HMAC secret is your merchant API key — there is no separate webhook secret.
   contact:
-    name: Von Payments
-    url: https://vonpay.com
+    name: Von Payments Engineering
+    url: https://docs.vonpay.com
+    email: engineering@vonpay.com
+  license:
+    name: Proprietary
+    url: https://vonpay.com/terms
 
 servers:
   - url: https://checkout.vonpay.com
     description: Production
-  - url: http://localhost:3001
-    description: Local development
+
+tags:
+  - name: Sessions
+    description: Checkout session lifecycle — create, query, and manage payment sessions.
+  - name: Health
+    description: Service health and discovery endpoints.
 
 security:
   - BearerAuth: []
@@ -25,23 +108,31 @@ paths:
       operationId: createSession
       summary: Create a checkout session
       description: |
-        Creates a checkout session and returns a checkout URL. The merchant
-        redirects the buyer to this URL to complete payment.
+        Creates a new checkout session and returns a hosted checkout URL.
 
-        Sessions expire after 30 minutes.
+        Both secret keys (`vp_sk_*`) and publishable keys (`vp_pk_*`) are accepted.
+
+        **Dry run mode:** Pass `?dry_run=true` to validate the request without creating
+        a session. The response will be a `DryRunResult` with HTTP 200 instead of the
+        normal `Session` with HTTP 201.
+
+        **Rate limit:** 10 requests per 60-second window per key.
       tags:
         - Sessions
       security:
         - BearerAuth: []
       parameters:
-        - name: Idempotency-Key
-          in: header
+        - $ref: "#/components/parameters/VonPayVersion"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: dry_run
+          in: query
           required: false
-          description: Unique key to ensure idempotent session creation
+          description: |
+            When `true`, validates the request payload and returns a `DryRunResult`
+            without creating a session. Useful for client-side form validation.
           schema:
-            type: string
-            maxLength: 255
-            example: "order_123_attempt_1"
+            type: boolean
+            default: false
       requestBody:
         required: true
         content:
@@ -49,59 +140,115 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateSessionRequest"
             examples:
-              basic:
-                summary: Basic payment
+              minimal:
+                summary: Minimal session
                 value:
-                  merchantId: default
-                  amount: 1499
+                  amount: 5000
+                  currency: USD
+              full:
+                summary: Full session with line items
+                value:
+                  amount: 12500
                   currency: USD
                   country: US
-                  successUrl: https://mystore.com/confirm
-              withItems:
-                summary: With line items and buyer info
-                value:
-                  merchantId: default
-                  amount: 2298
-                  currency: USD
-                  country: US
-                  successUrl: https://mystore.com/order/123/confirm
-                  cancelUrl: https://mystore.com/cart
-                  buyerId: cust_123
+                  mode: payment
+                  description: "Order #1042"
+                  locale: en-US
+                  successUrl: https://example.com/success
+                  cancelUrl: https://example.com/cancel
+                  buyerId: cust_abc123
                   buyerName: Jane Doe
                   buyerEmail: jane@example.com
+                  collectShipping: true
+                  expiresIn: 1800
+                  metadata:
+                    orderId: "1042"
+                    source: web
                   lineItems:
-                    - name: Premium Widget
-                      quantity: 1
-                      unitAmount: 1499
+                    - name: Widget Pro
+                      quantity: 2
+                      unitAmount: 4500
+                      imageUrl: https://cdn.example.com/widget.png
                     - name: Shipping
                       quantity: 1
-                      unitAmount: 799
-                  metadata:
-                    orderId: order_123
+                      unitAmount: 3500
       responses:
         "201":
-          description: Session created
+          description: Session created successfully.
           headers:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
+            Von-Pay-Version:
+              $ref: "#/components/headers/Von-Pay-Version"
+            Von-Pay-Latest-Version:
+              $ref: "#/components/headers/Von-Pay-Latest-Version"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CheckoutSession"
+                $ref: "#/components/schemas/SessionCreated"
+              example:
+                id: cs_live_abc123def456
+                checkoutUrl: https://checkout.vonpay.com/cs_live_abc123def456
+                expiresAt: "2026-04-14T12:30:00.000Z"
+        "200":
+          description: Dry run validation result (returned when `dry_run=true`).
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            Von-Pay-Version:
+              $ref: "#/components/headers/Von-Pay-Version"
+            Von-Pay-Latest-Version:
+              $ref: "#/components/headers/Von-Pay-Latest-Version"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DryRunResult"
+              example:
+                valid: true
+                warnings: []
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /v1/sessions/{sessionId}:
     get:
       operationId: getSession
       summary: Get session status
-      description: Returns the current status and details of a checkout session.
+      description: |
+        Retrieves the current state of a checkout session.
+
+        **Requires a secret key** (`vp_sk_*`). Publishable keys are rejected with
+        `auth_key_type_forbidden`.
+
+        The `shippingAddress` field is only populated when `status` is `succeeded`
+        and `collectShipping` was enabled on the session.
+
+        **Rate limit:** 30 requests per 60-second window per key.
       tags:
         - Sessions
       security:
@@ -110,305 +257,460 @@ paths:
         - name: sessionId
           in: path
           required: true
+          description: The checkout session ID (e.g., `cs_live_abc123def456`).
           schema:
             type: string
-            example: vp_cs_live_k7x9m2n4p3
+        - $ref: "#/components/parameters/VonPayVersion"
       responses:
         "200":
-          description: Session found
+          description: Session details.
           headers:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
+            Von-Pay-Version:
+              $ref: "#/components/headers/Von-Pay-Version"
+            Von-Pay-Latest-Version:
+              $ref: "#/components/headers/Von-Pay-Latest-Version"
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SessionStatus"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: "#/components/schemas/Session"
+              examples:
+                pending:
+                  summary: Pending session
+                  value:
+                    id: cs_live_abc123def456
+                    status: pending
+                    mode: payment
+                    merchantId: merch_xyz789
+                    amount: 5000
+                    currency: USD
+                    description: "Order #1042"
+                    collectShipping: false
+                    metadata:
+                      orderId: "1042"
+                    createdAt: "2026-04-14T12:00:00.000Z"
+                    updatedAt: "2026-04-14T12:00:00.000Z"
+                    expiresAt: "2026-04-14T12:30:00.000Z"
+                succeeded:
+                  summary: Succeeded session with shipping
+                  value:
+                    id: cs_live_abc123def456
+                    status: succeeded
+                    mode: payment
+                    merchantId: merch_xyz789
+                    amount: 5000
+                    currency: USD
+                    country: US
+                    description: "Order #1042"
+                    collectShipping: true
+                    shippingAddress:
+                      firstName: Jane
+                      lastName: Doe
+                      address: 123 Main St
+                      city: San Francisco
+                      state: CA
+                      zip: "94102"
+                      country: US
+                    transactionId: txn_pay_abc123
+                    metadata:
+                      orderId: "1042"
+                    createdAt: "2026-04-14T12:00:00.000Z"
+                    updatedAt: "2026-04-14T12:05:30.000Z"
+                    expiresAt: "2026-04-14T12:30:00.000Z"
         "401":
           $ref: "#/components/responses/Unauthorized"
-
-  /api/checkout/init:
-    post:
-      operationId: initCheckout
-      summary: Initialize payment embed (internal)
-      description: |
-        Called by the hosted checkout page to initialize the payment embed.
-        Validates the session, moves it to "processing", and returns a provider token.
-
-        **Internal use only** — not intended for merchant integration.
-      tags:
-        - Checkout (Internal)
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - sessionId
-              properties:
-                sessionId:
-                  type: string
-                  example: vp_cs_live_k7x9m2n4p3
-      responses:
-        "200":
-          description: Checkout initialized
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  type:
-                    type: string
-                    description: Provider type for client-side rendering
-                    enum: [card_element, hosted_fields]
-                  token:
-                    type: string
-                    description: Payment provider embed token
-                  providerId:
-                    type: string
-                    nullable: true
-                    description: Provider instance ID (for hosted fields embed)
-                  providerMerchantId:
-                    type: string
-                    description: Provider merchant account ID
-                  environment:
-                    type: string
-                    enum: [sandbox, production]
-                  providerSessionId:
-                    type: string
-                    description: Provider checkout session ID
-                  providerPublishableKey:
-                    type: string
-                    nullable: true
-                    description: Client-side publishable key (for card element)
-                  providerAccountId:
-                    type: string
-                    nullable: true
-                    description: Provider account ID (for card element)
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
-        "409":
-          description: Session is not in a valid state for initialization
-        "410":
-          description: Session has expired
-
-  /api/checkout/complete:
-    post:
-      operationId: completeCheckout
-      summary: Complete checkout (internal)
-      description: |
-        Called by the hosted checkout page after the payment embed reports a
-        successful transaction. Updates session status and returns a signed
-        redirect URL.
-
-        **Internal use only** — not intended for merchant integration.
-      tags:
-        - Checkout (Internal)
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - sessionId
-                - transactionId
-              properties:
-                sessionId:
-                  type: string
-                transactionId:
-                  type: string
-      responses:
-        "200":
-          description: Checkout completed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: succeeded
-                  sessionId:
-                    type: string
-                  transactionId:
-                    type: string
-                  redirectUrl:
-                    type: string
-                    nullable: true
-                    description: Signed redirect URL for the merchant
-
-  /api/webhooks/provider:
-    post:
-      operationId: receiveWebhook
-      summary: Receive provider webhook
-      description: |
-        Endpoint for the payment provider to send webhook events (transaction
-        updates, etc.). Persists the event and reconciles with checkout sessions
-        asynchronously.
-      tags:
-        - Webhooks
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                id:
-                  type: string
-                  description: Webhook event ID
-                type:
-                  type: string
-                  description: Event type (e.g. transaction.captured)
-                data:
-                  type: object
-                  description: Event payload
-      responses:
-        "200":
-          description: Webhook received
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  received:
-                    type: boolean
-                    example: true
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/health:
     get:
       operationId: healthCheck
       summary: Health check
-      description: Returns the health status of the checkout service and its dependencies.
+      description: Returns the service health status and current API version. No authentication required.
       tags:
-        - Operations
+        - Health
       security: []
       responses:
         "200":
-          description: Service is healthy
+          description: Service is healthy.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
-        "503":
-          description: Service is degraded
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthStatus"
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+                version: "2026-04-14"
 
+  /.well-known/vonpay.json:
+    get:
+      operationId: discoveryMetadata
+      summary: Discovery metadata
+      description: |
+        Returns static JSON metadata for service discovery. No authentication required.
+        Clients and integrations can use this endpoint to discover API capabilities
+        and version information.
+      tags:
+        - Health
+      security: []
+      responses:
+        "200":
+          description: Discovery metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                description: Static discovery metadata. Schema is intentionally open to allow forward-compatible additions.
+
+# ---------------------------------------------------------------------------
+# Webhooks
+# ---------------------------------------------------------------------------
+x-webhooks:
+  session.succeeded:
+    post:
+      operationId: webhookSessionSucceeded
+      summary: Session succeeded
+      description: |
+        Fired when a checkout session payment is successfully captured and the
+        session transitions from `pending` to `succeeded`.
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: "#/components/parameters/WebhookSignature"
+        - $ref: "#/components/parameters/WebhookTimestamp"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookSessionSucceeded"
+            example:
+              event: session.succeeded
+              sessionId: cs_live_abc123def456
+              merchantId: merch_xyz789
+              amount: 5000
+              currency: USD
+              status: succeeded
+              transactionId: txn_pay_abc123
+              metadata:
+                orderId: "1042"
+              timestamp: "2026-04-14T12:05:30.000Z"
+      responses:
+        "200":
+          description: Webhook received. Return any 2xx to acknowledge.
+
+  session.failed:
+    post:
+      operationId: webhookSessionFailed
+      summary: Session failed
+      description: |
+        Fired when a checkout session payment fails and the session transitions
+        from `pending` to `failed`.
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: "#/components/parameters/WebhookSignature"
+        - $ref: "#/components/parameters/WebhookTimestamp"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookSessionFailed"
+            example:
+              event: session.failed
+              sessionId: cs_live_abc123def456
+              merchantId: merch_xyz789
+              amount: 5000
+              currency: USD
+              status: failed
+              error: "Card declined"
+              failureCode: card_declined
+              metadata:
+                orderId: "1042"
+              timestamp: "2026-04-14T12:05:30.000Z"
+      responses:
+        "200":
+          description: Webhook received.
+
+  session.expired:
+    post:
+      operationId: webhookSessionExpired
+      summary: Session expired
+      description: |
+        Fired when a checkout session exceeds its TTL without completing payment
+        and transitions from `pending` to `expired`.
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: "#/components/parameters/WebhookSignature"
+        - $ref: "#/components/parameters/WebhookTimestamp"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookSessionExpired"
+            example:
+              event: session.expired
+              sessionId: cs_live_abc123def456
+              merchantId: merch_xyz789
+              amount: 5000
+              currency: USD
+              status: expired
+              metadata:
+                orderId: "1042"
+              timestamp: "2026-04-14T12:30:00.000Z"
+      responses:
+        "200":
+          description: Webhook received.
+
+  refund.created:
+    post:
+      operationId: webhookRefundCreated
+      summary: Refund created
+      description: Fired when a refund is initiated for a previously succeeded session.
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: "#/components/parameters/WebhookSignature"
+        - $ref: "#/components/parameters/WebhookTimestamp"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookRefundCreated"
+            example:
+              event: refund.created
+              sessionId: cs_live_abc123def456
+              merchantId: merch_xyz789
+              amount: 5000
+              currency: USD
+              status: refunded
+              refundId: ref_abc123
+              metadata:
+                orderId: "1042"
+              timestamp: "2026-04-14T14:00:00.000Z"
+      responses:
+        "200":
+          description: Webhook received.
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
 components:
+  # ---- Security Schemes ----
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
       description: |
-        API key authentication. Pass your API key as a Bearer token.
+        Pass a Von Payments API key as a Bearer token.
 
-        ```
-        Authorization: Bearer vp_key_live_xxx
-        ```
+        Accepted key prefixes:
+        - `vp_sk_test_` / `vp_sk_live_` — secret keys (full access)
+        - `vp_pk_test_` / `vp_pk_live_` — publishable keys (create sessions only)
 
-  headers:
-    X-Request-Id:
+  # ---- Parameters ----
+  parameters:
+    VonPayVersion:
+      name: Von-Pay-Version
+      in: header
+      required: false
+      description: |
+        Pin the API response format to a specific version date. If omitted, the
+        latest version is used. Format: `YYYY-MM-DD`.
       schema:
         type: string
-      description: Unique request ID for tracing and debugging
+        pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+        example: "2026-04-14"
 
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        A unique key to ensure the request is processed exactly once. If a request
+        with the same idempotency key was already processed, the original response
+        is returned without creating a duplicate session.
+      schema:
+        type: string
+        maxLength: 255
+        example: "order_1042_attempt_1"
+
+    WebhookSignature:
+      name: X-VonPay-Signature
+      in: header
+      required: true
+      description: HMAC-SHA256 signature of the raw request body, computed with your merchant API key (vp_sk_*). The HMAC secret is your merchant API key — there is no separate webhook secret.
+      schema:
+        type: string
+
+    WebhookTimestamp:
+      name: X-VonPay-Timestamp
+      in: header
+      required: true
+      description: ISO 8601 timestamp of when the webhook event was fired.
+      schema:
+        type: string
+        format: date-time
+
+  # ---- Headers ----
+  headers:
+    X-Request-Id:
+      description: Unique identifier for this request, useful for support tickets and debugging.
+      schema:
+        type: string
+        example: req_abc123def456
+
+    Von-Pay-Version:
+      description: The API version used to process this request.
+      schema:
+        type: string
+        example: "2026-04-14"
+
+    Von-Pay-Latest-Version:
+      description: The latest available API version. Compare with `Von-Pay-Version` to detect upgrades.
+      schema:
+        type: string
+        example: "2026-04-14"
+
+    X-RateLimit-Limit:
+      description: Maximum number of requests allowed in the current window.
+      schema:
+        type: integer
+        example: 10
+
+    X-RateLimit-Remaining:
+      description: Number of requests remaining in the current window.
+      schema:
+        type: integer
+        example: 7
+
+    X-RateLimit-Reset:
+      description: UTC epoch seconds when the current rate limit window resets.
+      schema:
+        type: integer
+        example: 1744629060
+
+  # ---- Schemas ----
   schemas:
+    # -- Request bodies --
     CreateSessionRequest:
       type: object
       required:
-        - merchantId
         - amount
         - currency
-        - country
       properties:
-        merchantId:
-          type: string
-          description: Merchant account ID
-          maxLength: 100
-          example: default
         amount:
           type: integer
-          description: Amount in minor units (cents)
           minimum: 1
           maximum: 99999999
-          example: 1499
+          description: Payment amount in the smallest currency unit (e.g., cents for USD).
+          example: 5000
         currency:
           type: string
-          description: ISO 4217 currency code
           minLength: 3
           maxLength: 3
+          pattern: "^[A-Z]{3}$"
+          description: ISO 4217 currency code, uppercase.
           example: USD
         country:
           type: string
-          description: ISO 3166-1 alpha-2 country code
           minLength: 2
           maxLength: 2
+          pattern: "^[A-Z]{2}$"
+          description: ISO 3166-1 alpha-2 country code, uppercase.
           example: US
         mode:
           type: string
-          description: Session mode
           enum:
             - payment
           default: payment
+          description: Session mode. Currently only `payment` is supported.
+        description:
+          type: string
+          maxLength: 500
+          description: Human-readable description shown to the buyer during checkout.
+          example: "Order #1042"
+        locale:
+          type: string
+          maxLength: 10
+          description: BCP 47 locale tag for the checkout UI language.
+          example: en-US
         successUrl:
           type: string
           format: uri
-          description: Redirect URL after successful payment (HTTPS required)
-          maxLength: 2048
-          example: https://mystore.com/order/123/confirm
+          description: HTTPS URL to redirect the buyer after successful payment.
+          example: https://example.com/success
         cancelUrl:
           type: string
           format: uri
-          description: Redirect URL when buyer cancels (HTTPS required)
-          maxLength: 2048
-          example: https://mystore.com/cart
-        description:
-          type: string
-          description: Human-readable description of the payment
-          maxLength: 500
-        locale:
-          type: string
-          description: Locale for the checkout page (e.g. en-US)
-          maxLength: 10
-        expiresIn:
-          type: integer
-          description: Session TTL in seconds, default 1800
-          minimum: 300
-          maximum: 3600
+          description: HTTPS URL to redirect the buyer if they cancel checkout.
+          example: https://example.com/cancel
         buyerId:
           type: string
-          description: Merchant's external buyer/customer ID
           maxLength: 200
+          description: Your internal identifier for the buyer.
+          example: cust_abc123
         buyerName:
           type: string
-          description: Buyer's full name (encrypted at rest)
           maxLength: 200
+          description: Full name of the buyer.
+          example: Jane Doe
         buyerEmail:
           type: string
           format: email
-          description: Buyer's email address (encrypted at rest)
           maxLength: 254
+          description: Email address of the buyer.
+          example: jane@example.com
         lineItems:
           type: array
-          description: Order line items to display on the checkout page
           maxItems: 100
+          description: Itemized line items displayed during checkout.
           items:
             $ref: "#/components/schemas/LineItem"
+        collectShipping:
+          type: boolean
+          description: When `true`, the checkout form collects a shipping address from the buyer.
+          default: false
         metadata:
           type: object
-          description: Arbitrary key-value metadata (passed through to webhooks)
+          description: |
+            Arbitrary key-value pairs attached to the session. Keys and values must be
+            strings. Maximum value length is 500 characters. Metadata is returned in
+            session responses and webhook payloads.
           additionalProperties:
             type: string
             maxLength: 500
+          example:
+            orderId: "1042"
+            source: web
+        expiresIn:
+          type: integer
+          minimum: 300
+          maximum: 3600
+          description: |
+            Session TTL in seconds. The session expires this many seconds after creation.
+            Minimum 300 (5 minutes), maximum 3600 (1 hour). Defaults to server-side
+            configuration if omitted.
+          example: 1800
 
     LineItem:
       type: object
@@ -419,157 +721,581 @@ components:
       properties:
         name:
           type: string
-          maxLength: 200
-          example: Premium Widget
+          description: Display name of the item.
+          example: Widget Pro
         quantity:
           type: integer
           minimum: 1
-          maximum: 9999
-          example: 1
+          description: Quantity of this item.
+          example: 2
         unitAmount:
           type: integer
           minimum: 0
-          description: Unit price in minor units (cents)
-          example: 1499
+          description: Price per unit in the smallest currency unit.
+          example: 4500
         imageUrl:
           type: string
           format: uri
-          maxLength: 2048
+          description: URL to a product image displayed in the checkout UI.
+          example: https://cdn.example.com/widget.png
 
-    CheckoutSession:
+    # -- Response bodies --
+    SessionCreated:
       type: object
+      required:
+        - id
+        - checkoutUrl
+        - expiresAt
       properties:
         id:
           type: string
-          description: Session ID (prefixed, e.g. vp_cs_live_xxx)
-          example: vp_cs_live_k7x9m2n4p3
+          description: Unique session identifier.
+          example: cs_live_abc123def456
         checkoutUrl:
           type: string
           format: uri
-          description: URL to redirect the buyer to
-          example: https://checkout.vonpay.com/checkout?session=vp_cs_live_k7x9m2n4p3
+          description: URL to redirect the buyer to complete payment.
+          example: https://checkout.vonpay.com/cs_live_abc123def456
         expiresAt:
           type: string
           format: date-time
-          description: Session expiry time (30 minutes from creation)
+          description: ISO 8601 timestamp when the session expires.
+          example: "2026-04-14T12:30:00.000Z"
 
-    SessionStatus:
+    DryRunResult:
       type: object
+      required:
+        - valid
+        - warnings
+      properties:
+        valid:
+          type: boolean
+          description: Whether the request payload would create a valid session.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Non-fatal warnings about the request (e.g., deprecated fields, suboptimal configuration).
+
+    Session:
+      type: object
+      required:
+        - id
+        - status
+        - mode
+        - merchantId
+        - amount
+        - currency
+        - createdAt
+        - updatedAt
+        - expiresAt
       properties:
         id:
           type: string
-          example: vp_cs_live_k7x9m2n4p3
+          description: Unique session identifier.
+          example: cs_live_abc123def456
         status:
-          type: string
-          enum:
-            - pending
-            - processing
-            - succeeded
-            - failed
-            - expired
-        merchantId:
-          type: string
-        amount:
-          type: integer
-        currency:
-          type: string
+          $ref: "#/components/schemas/SessionStatus"
         mode:
           type: string
           enum:
             - payment
-        description:
+          description: Session mode.
+          example: payment
+        merchantId:
           type: string
-          nullable: true
+          description: Identifier of the merchant that owns this session.
+          example: merch_xyz789
+        amount:
+          type: integer
+          description: Payment amount in the smallest currency unit.
+          example: 5000
+        currency:
+          type: string
+          description: ISO 4217 currency code.
+          example: USD
         country:
           type: string
-          nullable: true
+          description: ISO 3166-1 alpha-2 country code. Present only if provided at creation.
+          example: US
+        description:
+          type: string
+          description: Human-readable description.
+          example: "Order #1042"
         collectShipping:
           type: boolean
+          description: Whether shipping address collection was enabled.
         shippingAddress:
-          type: object
-          nullable: true
-          description: Shipping address (only returned when status is succeeded)
+          description: |
+            The buyer's shipping address. Only populated when `status` is `succeeded`
+            and `collectShipping` was `true`.
+          $ref: "#/components/schemas/ShippingAddress"
         transactionId:
           type: string
-          nullable: true
+          description: |
+            Identifier of the payment transaction. Only present when `status` is
+            `succeeded`.
+          example: txn_pay_abc123
         metadata:
           type: object
-          nullable: true
           additionalProperties:
             type: string
-        expiresAt:
-          type: string
-          format: date-time
+          description: Metadata key-value pairs attached at session creation.
         createdAt:
           type: string
           format: date-time
+          description: ISO 8601 timestamp when the session was created.
+          example: "2026-04-14T12:00:00.000Z"
         updatedAt:
           type: string
           format: date-time
+          description: ISO 8601 timestamp of the last status change.
+          example: "2026-04-14T12:05:30.000Z"
+        expiresAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the session expires or expired.
+          example: "2026-04-14T12:30:00.000Z"
 
-    HealthStatus:
+    SessionStatus:
+      type: string
+      enum:
+        - pending
+        - succeeded
+        - failed
+        - expired
+      description: |
+        Current state of the checkout session.
+
+        - `pending` — session created, awaiting payment
+        - `succeeded` — payment captured successfully
+        - `failed` — payment attempt failed
+        - `expired` — session TTL exceeded without payment
+
+    ShippingAddress:
       type: object
+      required:
+        - firstName
+        - lastName
+        - address
+        - city
+        - state
+        - zip
+        - country
+      properties:
+        firstName:
+          type: string
+          description: Buyer's first name.
+          example: Jane
+        lastName:
+          type: string
+          description: Buyer's last name.
+          example: Doe
+        address:
+          type: string
+          description: Street address line 1.
+          example: 123 Main St
+        address2:
+          type: string
+          description: Street address line 2 (apartment, suite, etc.).
+          example: Apt 4B
+        city:
+          type: string
+          description: City name.
+          example: San Francisco
+        state:
+          type: string
+          description: State, province, or region code.
+          example: CA
+        zip:
+          type: string
+          description: Postal / ZIP code.
+          example: "94102"
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2 country code.
+          example: US
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
       properties:
         status:
           type: string
-          enum: [ok, healthy, degraded]
-        circuits:
-          type: object
-          description: Circuit breaker states
-          additionalProperties:
-            type: string
-        checks:
-          type: object
-          description: Dependency health (only with ?deep=true)
-          additionalProperties:
-            type: string
-            enum: [ok, error, skipped]
-        latencyMs:
-          type: integer
-        timestamp:
+          description: Service health status.
+          example: ok
+        version:
           type: string
-          format: date-time
+          description: Current API version.
+          example: "2026-04-14"
 
-    Error:
+    # -- Error schemas --
+    ErrorResponse:
       type: object
+      required:
+        - error
+        - code
       properties:
         error:
           type: string
-          description: Human-readable error message
+          description: Human-readable error message.
+          example: "Authorization header must use Bearer scheme"
+        code:
+          type: string
+          description: |
+            Machine-readable error code. One of:
 
+            **Authentication:**
+            - `auth_missing_bearer` — no Authorization header or not Bearer scheme
+            - `auth_invalid_key` — key format is invalid or key not found
+            - `auth_key_type_forbidden` — endpoint requires a secret key but a publishable key was used
+            - `auth_merchant_inactive` — merchant account is deactivated
+            - `auth_service_unavailable` — auth service is temporarily unavailable
+
+            **Sessions:**
+            - `session_not_found` — session ID does not exist
+            - `session_expired` — session has expired
+            - `session_wrong_state` — operation not valid for current session state
+            - `session_integrity_error` — data integrity check failed
+
+            **Validation:**
+            - `validation_error` — generic validation failure
+            - `validation_missing_field` — required field is missing
+            - `validation_invalid_amount` — amount is out of range
+
+            **Merchant:**
+            - `merchant_not_configured` — merchant payment configuration is incomplete
+
+            **Rate Limiting:**
+            - `rate_limit_exceeded` — too many requests
+
+            **Provider:**
+            - `provider_unavailable` — upstream payment provider is unavailable
+
+            **General:**
+            - `internal_error` — unexpected server error
+            - `unsupported_media_type` — Content-Type must be application/json
+
+            **Webhooks:**
+            - `webhook_missing_signature` — X-VonPay-Signature header is missing
+            - `webhook_invalid_signature` — signature verification failed
+            - `webhook_not_configured` — no webhook endpoint configured
+
+            **Security:**
+            - `origin_forbidden` — request origin is not allowed
+            - `transaction_verification_failed` — transaction verification check failed
+          enum:
+            - auth_missing_bearer
+            - auth_invalid_key
+            - auth_key_type_forbidden
+            - auth_merchant_inactive
+            - auth_service_unavailable
+            - session_not_found
+            - session_expired
+            - session_wrong_state
+            - session_integrity_error
+            - validation_error
+            - validation_missing_field
+            - validation_invalid_amount
+            - merchant_not_configured
+            - rate_limit_exceeded
+            - provider_unavailable
+            - internal_error
+            - unsupported_media_type
+            - webhook_missing_signature
+            - webhook_invalid_signature
+            - webhook_not_configured
+            - origin_forbidden
+            - transaction_verification_failed
+          example: validation_error
+        fix:
+          type: string
+          description: Actionable suggestion for the developer to resolve the error.
+          example: "Provide an amount between 1 and 99999999."
+        docs:
+          type: string
+          format: uri
+          description: Link to relevant documentation page.
+          example: "https://docs.vonpay.com/errors/validation_error"
+
+    # -- Webhook event payloads --
+    WebhookEventBase:
+      type: object
+      required:
+        - event
+        - sessionId
+        - merchantId
+        - amount
+        - currency
+        - status
+        - timestamp
+      properties:
+        event:
+          type: string
+          description: Event type identifier.
+        sessionId:
+          type: string
+          description: The checkout session this event relates to.
+          example: cs_live_abc123def456
+        merchantId:
+          type: string
+          description: Merchant that owns the session.
+          example: merch_xyz789
+        amount:
+          type: integer
+          description: Payment amount in smallest currency unit.
+          example: 5000
+        currency:
+          type: string
+          description: ISO 4217 currency code.
+          example: USD
+        status:
+          type: string
+          description: Session status after this event.
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Metadata from the original session, if any.
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of the event.
+          example: "2026-04-14T12:05:30.000Z"
+
+    WebhookSessionSucceeded:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEventBase"
+        - type: object
+          properties:
+            event:
+              type: string
+              const: session.succeeded
+            status:
+              type: string
+              const: succeeded
+            transactionId:
+              type: string
+              description: Identifier of the captured payment transaction.
+              example: txn_pay_abc123
+
+    WebhookSessionFailed:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEventBase"
+        - type: object
+          properties:
+            event:
+              type: string
+              const: session.failed
+            status:
+              type: string
+              const: failed
+            error:
+              type: string
+              description: Human-readable failure reason.
+              example: Card declined
+            failureCode:
+              type: string
+              description: Machine-readable failure code from the payment provider.
+              example: card_declined
+
+    WebhookSessionExpired:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEventBase"
+        - type: object
+          properties:
+            event:
+              type: string
+              const: session.expired
+            status:
+              type: string
+              const: expired
+
+    WebhookRefundCreated:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEventBase"
+        - type: object
+          properties:
+            event:
+              type: string
+              const: refund.created
+            status:
+              type: string
+              const: refunded
+            refundId:
+              type: string
+              description: Identifier of the refund.
+              example: ref_abc123
+
+  # ---- Reusable Responses ----
   responses:
     BadRequest:
-      description: Invalid request
+      description: The request is malformed or contains invalid parameters.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Invalid request body"
+            code: validation_error
+            fix: "Check the request body against the API schema."
+            docs: "https://docs.vonpay.com/errors/validation_error"
+
     Unauthorized:
-      description: Invalid or missing API key
+      description: Authentication failed — missing or invalid API key.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            missing:
+              summary: Missing Bearer token
+              value:
+                error: "Authorization header must use Bearer scheme"
+                code: auth_missing_bearer
+                fix: "Add 'Authorization: Bearer vp_sk_...' to your request headers."
+                docs: "https://docs.vonpay.com/errors/auth_missing_bearer"
+            invalid:
+              summary: Invalid API key
+              value:
+                error: "API key is invalid or has been revoked"
+                code: auth_invalid_key
+                fix: "Check your API key in the Von Payments dashboard."
+                docs: "https://docs.vonpay.com/errors/auth_invalid_key"
+
+    Forbidden:
+      description: The API key does not have permission for this operation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            keyType:
+              summary: Publishable key used on secret-only endpoint
+              value:
+                error: "This endpoint requires a secret key (vp_sk_*)"
+                code: auth_key_type_forbidden
+                fix: "Use a secret key instead of a publishable key for this request."
+                docs: "https://docs.vonpay.com/errors/auth_key_type_forbidden"
+            merchantInactive:
+              summary: Merchant account is inactive
+              value:
+                error: "Merchant account is inactive"
+                code: auth_merchant_inactive
+                fix: "Contact support to reactivate your merchant account."
+                docs: "https://docs.vonpay.com/errors/auth_merchant_inactive"
+            originForbidden:
+              summary: Request origin not allowed
+              value:
+                error: "Request origin is not in the allowed list"
+                code: origin_forbidden
+                fix: "Add this origin to your allowed origins in the dashboard."
+                docs: "https://docs.vonpay.com/errors/origin_forbidden"
+
     NotFound:
-      description: Resource not found
+      description: The requested resource does not exist.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Session not found"
+            code: session_not_found
+            fix: "Verify the session ID and ensure it belongs to your merchant account."
+            docs: "https://docs.vonpay.com/errors/session_not_found"
+
+    UnsupportedMediaType:
+      description: The request Content-Type is not `application/json`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Content-Type must be application/json"
+            code: unsupported_media_type
+            fix: "Set the Content-Type header to application/json."
+            docs: "https://docs.vonpay.com/errors/unsupported_media_type"
+
+    UnprocessableEntity:
+      description: The request body is valid JSON but contains semantic errors.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            missingField:
+              summary: Required field missing
+              value:
+                error: "currency is required"
+                code: validation_missing_field
+                fix: "Add the 'currency' field to your request body."
+                docs: "https://docs.vonpay.com/errors/validation_missing_field"
+            invalidAmount:
+              summary: Amount out of range
+              value:
+                error: "amount must be between 1 and 99999999"
+                code: validation_invalid_amount
+                fix: "Provide an amount between 1 and 99999999."
+                docs: "https://docs.vonpay.com/errors/validation_invalid_amount"
+            merchantNotConfigured:
+              summary: Merchant payment config incomplete
+              value:
+                error: "Merchant payment configuration is incomplete"
+                code: merchant_not_configured
+                fix: "Complete your payment provider setup in the dashboard."
+                docs: "https://docs.vonpay.com/errors/merchant_not_configured"
+
     RateLimited:
-      description: Too many requests
+      description: Too many requests — rate limit exceeded.
       headers:
-        Retry-After:
-          schema:
-            type: integer
-          description: Seconds to wait before retrying
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Rate limit exceeded"
+            code: rate_limit_exceeded
+            fix: "Wait until the rate limit window resets. See X-RateLimit-Reset header."
+            docs: "https://docs.vonpay.com/errors/rate_limit_exceeded"
+
     InternalError:
-      description: Internal server error
+      description: Unexpected server error.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "An unexpected error occurred"
+            code: internal_error
+            fix: "Retry the request. If the problem persists, contact support with the X-Request-Id."
+            docs: "https://docs.vonpay.com/errors/internal_error"
+
+    ServiceUnavailable:
+      description: The service or an upstream dependency is temporarily unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            auth:
+              summary: Auth service unavailable
+              value:
+                error: "Authentication service is temporarily unavailable"
+                code: auth_service_unavailable
+                fix: "Retry after a short delay."
+                docs: "https://docs.vonpay.com/errors/auth_service_unavailable"
+            provider:
+              summary: Payment provider unavailable
+              value:
+                error: "Payment provider is temporarily unavailable"
+                code: provider_unavailable
+                fix: "Retry after a short delay. The payment provider may be experiencing issues."
+                docs: "https://docs.vonpay.com/errors/provider_unavailable"

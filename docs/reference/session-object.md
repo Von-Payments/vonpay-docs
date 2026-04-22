@@ -37,17 +37,9 @@ The ID is a 10-character random string. It cannot be guessed.
 | `updatedAt` | string | Yes | ISO 8601 last update timestamp |
 | `expiresAt` | string | Yes | ISO 8601 expiry timestamp |
 
-### Provider fields (Vora routing)
+### Payment routing (Vora)
 
-These fields expose which payment processor Von Payments routed the session to. They are read-only and can be ignored for simple integrations — see [Vora — Payment Routing](../concepts/vora.md) for the full explanation.
-
-| Field | Type | Present | Description |
-|-------|------|---------|-------------|
-| `type` | string | Init response | Processor family: `stripe_connect_direct`, `gr4vy`, `vonpay_router`, etc. |
-| `providerId` | string | Init response | Von Payments internal ID of the processor row handling this session. |
-| `providerMerchantId` | string | Init response | Processor-side merchant ID (e.g. Stripe `acct_...`). |
-| `providerPublishableKey` | string | Init response | Processor publishable key if the checkout page loads the processor's client-side SDK. |
-| `providerAccountId` | string | Init response | Processor-specific account ID for reporting and reconciliation. |
+Processor selection (Stripe, Adyen, NMI, etc.) happens server-side inside Von Payments. The merchant API does **not** expose which processor was used — neither `POST /v1/sessions` nor `GET /v1/sessions/:id` returns processor identifiers. Your integration is identical regardless of which processor fires the charge. See [Vora — Payment Routing](../concepts/vora.md) for context.
 
 ## Status Lifecycle
 

@@ -87,7 +87,7 @@ Every webhook request includes these headers:
 | `X-VonPay-Signature` | HMAC-SHA256 signature of the request body |
 | `X-VonPay-Timestamp` | ISO 8601 timestamp of when the event was sent |
 | `Content-Type` | `application/json` |
-| `User-Agent` | `VonPay-Webhooks/1.0` |
+| `User-Agent` | `VonPay-Webhook/1.0` |
 
 ---
 
@@ -131,7 +131,7 @@ app.post("/webhooks/vonpay", express.raw({ type: "application/json" }), (req, re
       timestamp                        // X-VonPay-Timestamp header
     );
 
-    switch (event.type) {
+    switch (event.event) {
       case "session.succeeded":
         // Fulfill the order
         await fulfillOrder(event.sessionId, event.transactionId);
@@ -181,12 +181,12 @@ def webhook():
             timestamp,                          # X-VonPay-Timestamp header
         )
 
-        if event["type"] == "session.succeeded":
-            fulfill_order(event["sessionId"], event["transactionId"])
-        elif event["type"] == "session.failed":
-            handle_failure(event["sessionId"], event["error"])
-        elif event["type"] == "refund.created":
-            process_refund(event["sessionId"], event["refundId"])
+        if event.event == "session.succeeded":
+            fulfill_order(event.session_id, event.transaction_id)
+        elif event.event == "session.failed":
+            handle_failure(event.session_id, event.error)
+        elif event.event == "refund.created":
+            process_refund(event.session_id, event.refund_id)
 
         return jsonify(received=True), 200
 

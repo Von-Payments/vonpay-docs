@@ -37,8 +37,10 @@ Ensure these are set in your production environment:
 
 ```
 VON_PAY_SECRET_KEY=vp_sk_live_xxx        # Your live API key
-VON_PAY_SESSION_SECRET=<random-string>    # Shared HMAC secret (same on both sides)
+VON_PAY_SESSION_SECRET=ss_live_xxx        # Provisioned by Von Payments — copy from dashboard
 ```
+
+Do not generate the session secret yourself. It is issued by Von Payments when you create an API key and must match the value we store on the signing side. Copy it from `/dashboard/developers/api-keys`.
 
 ### 4. Return URL Handler
 
@@ -67,7 +69,8 @@ Make a small real payment ($1.00) to verify:
 - [ ] Error handling for failed payments
 - [ ] Order confirmation page works
 - [ ] Small test payment succeeded
-- [ ] Webhook endpoint configured (when available)
+- [ ] Webhook endpoint configured + signature verification tested
+- [ ] Webhook handler is idempotent (same event delivered twice = no duplicate fulfillment)
 
 ## Monitoring
 

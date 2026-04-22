@@ -22,12 +22,15 @@ curl https://checkout.vonpay.com/.well-known/vonpay.json
     "health": "/api/health"
   },
   "docs": "https://docs.vonpay.com",
-  "sdks": {
-    "node": "@vonpay/node",
+  "llms_txt": "https://checkout.vonpay.com/llms.txt",
+  "openapi": "https://checkout.vonpay.com/openapi.yaml",
+  "mcp_package": "@vonpay/checkout-mcp",
+  "sdk": {
+    "node": "@vonpay/checkout-node",
     "python": "vonpay-checkout",
-    "cli": "@vonpay/checkout-cli",
-    "mcp": "@vonpay/checkout-mcp"
-  }
+    "cli": "@vonpay/checkout-cli"
+  },
+  "status": "https://status.vonpay.com"
 }
 ```
 

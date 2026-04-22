@@ -36,6 +36,47 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-22 09:45Z — checkout → merchant-app, vonpay-docs — DONE — RESOLVED
+**Title:** Webhook signature v1 spec frozen — 09:10Z item #9 landed
+
+**Note on RESOLVED semantics:** the **spec contract** is frozen and signed off — that's what's resolved. The **implementation file** (`src/lib/webhook-signature.ts`) is Sortie 2 scope and is explicitly not shipped by this entry. Consumers (merchant-app signer, vonpay-docs verifier guide, SDK authors) can code against the spec immediately without waiting for the checkout-side implementation.
+
+**Automata round 1 findings (2026-04-22 /close) folded back into the spec before first publish:**
+- Removed length-based early-return in Node example — leaked a 1-bit timing signal
+- Capped `v1=` entries at 2 — prevents injection attacks with many short candidates
+- Replay window changed from symmetric 10-min to asymmetric 5-min-past + 30-sec-future — aligns with sender-signs-per-retry model, closes the forward-replay hold window
+- Clarified key encoding: raw `whsec_*` string as UTF-8 bytes, no base64-decode
+- Stripe-compatibility note rewritten: "shape similar, details differ, treat as starting point not drop-in"
+
+These are spec-contract changes — implementers should code against the current `docs/webhook-signature-v1.md`, not against this bridge entry's summary.
+
+**Body:** Per my reply to 09:10Z (picking up the smallest slice of Sortie 2 scope that has no external blockers), the canonical webhook signature spec is landed at `docs/webhook-signature-v1.md` in vonpay-checkout. This unblocks merchant-app's delivery engine (09:10Z item #1) and vonpay-docs' verification guide (09:15Z item #2) without waiting on QStash provisioning.
+
+**Summary of the contract:**
+
+- Header: `x-vonpay-signature: t=<unix-seconds>,v1=<hex-hmac>`
+- HMAC input: `<t> + "." + <raw_body>` — raw bytes, not re-serialized JSON
+- Algorithm: HMAC-SHA256, lowercase hex
+- Replay tolerance: `|now - t| > 600s` → reject 400
+- Rotation: comma-separated multi-`v1=` entries; accept if ANY match
+- Constant-time compare required
+
+Stripe-compatibility by design so developers who integrated Stripe first can swap header names and reuse their verifier.
+
+**For merchant-app delivery engine (09:10Z item #1):** sign with this exact shape. One `v1=` per active-or-grace signing secret. Reference Node implementation at bottom of the doc is the signer behavior too (just replace `verify` with `generate`).
+
+**For vonpay-docs verification guide (09:15Z item #2):** the doc already contains ready-to-copy Node + Python verifiers. Swap into a Docusaurus MDX page; Ruby/PHP/Go stubs can follow the same shape.
+
+**Items NOT landed this Sortie** (intentionally deferred per `/close` discipline):
+- Delivery engine (09:10Z #1) — needs QStash provisioning first (VON-73 Phase 3, Wilson Railway env vars pending)
+- Raw signing-secret storage table (09:10Z #2) — ships with delivery engine
+- Event-dispatch hooks (09:10Z #3) — ships with delivery engine
+- Items 4–8, 10 of 09:10Z — Sortie 3 scope, not blocking a first dev
+
+**Related:** `docs/webhook-signature-v1.md` (checkout), bridge 2026-04-22 09:10Z item #9, bridge 2026-04-22 09:15Z item #2, VON-114 (vonpay-docs ticket).
+
+---
+
 ## 2026-04-22 09:30Z — checkout → merchant-app — REQUEST — ACKED
 **Title:** Developer Hub (dev-tools) readiness for first live developer — 6 items
 

@@ -18,12 +18,10 @@ Every Von Payments error response includes `code` and `fix` fields:
 
 ```json
 {
-  "error": {
-    "code": "invalid_currency",
-    "message": "Currency 'USDD' is not supported.",
-    "fix": "Use a valid ISO 4217 currency code. Supported: USD, EUR, GBP, CAD, AUD.",
-    "docs": "https://docs.vonpay.com/reference/error-codes"
-  }
+  "error": "Currency 'USDD' is not supported.",
+  "code": "validation_error",
+  "fix": "Check the request body against the API reference",
+  "docs": "https://docs.vonpay.com/integration/create-session"
 }
 ```
 
@@ -48,7 +46,7 @@ If your project uses the Von Payments API, add this to your `CLAUDE.md` so Claud
 ## Von Payments
 
 - API base: https://checkout.vonpay.com
-- Auth: Bearer token with `vp_key_test_*` (test) or `vp_key_live_*` (live)
+- Auth: Bearer token with `vp_sk_test_*` (test) or `vp_sk_live_*` (live)
 - Create sessions: POST /v1/sessions { amount, currency, country }
 - Get session: GET /v1/sessions/{id}
 - Docs: https://docs.vonpay.com

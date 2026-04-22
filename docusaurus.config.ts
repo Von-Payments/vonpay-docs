@@ -44,6 +44,7 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           routeBasePath: '/',
           editUrl: 'https://github.com/Von-Payments/vonpay-docs/tree/main/',
+          exclude: ['bridge.md', '**/_archive/**', '**/_inflight/**'],
         },
         blog: false,
         theme: {

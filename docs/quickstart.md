@@ -92,7 +92,7 @@ vonpay checkout sessions create --amount 1499 --currency USD
 curl -X POST https://checkout.vonpay.com/v1/sessions \
   -H "Authorization: Bearer vp_sk_test_xxx" \
   -H "Content-Type: application/json" \
-  -H "Von-Pay-Version: 2026-01-01" \
+  -H "Von-Pay-Version: 2026-04-14" \
   -H "Idempotency-Key: order_123_attempt_1" \
   -d '{
     "amount": 1499,
@@ -157,7 +157,7 @@ app.post("/webhooks/vonpay", express.raw({ type: "application/json" }), (req, re
       timestamp                        // X-VonPay-Timestamp header
     );
 
-    switch (event.type) {
+    switch (event.event) {
       case "session.succeeded":
         console.log(`Payment succeeded: ${event.transactionId}`);
         // fulfill the order
@@ -195,8 +195,8 @@ def webhook():
             timestamp,
         )
 
-        if event["type"] == "session.succeeded":
-            print(f"Payment succeeded: {event['transactionId']}")
+        if event.event == "session.succeeded":
+            print(f"Payment succeeded: {event.transaction_id}")
 
         return {"received": True}, 200
     except Exception as e:

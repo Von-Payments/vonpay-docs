@@ -16,25 +16,31 @@ Add the script tag to your HTML:
 <script src="https://checkout.vonpay.com/vonpay.js"></script>
 ```
 
-This makes the `VonPayCheckout` object available globally.
+This makes the `VonPay` object available globally.
 
-## VonPayCheckout.configure(options)
+## Key requirements
+
+`vonpay.js` **requires a publishable key** (`vp_pk_test_*` or `vp_pk_live_*`). It rejects secret keys (`vp_sk_*`) and legacy keys (`vp_key_*`) with a thrown error, because either would expose full API credentials in the browser.
+
+Create a publishable key at `/dashboard/developers/api-keys`.
+
+## VonPay.configure(options)
 
 Call once before any other method:
 
 ```javascript
-VonPayCheckout.configure({
-  apiKey: "vp_sk_live_xxx",
-  baseUrl: "https://checkout.vonpay.com", // optional, this is the default
+VonPay.configure({
+  apiKey: "vp_pk_live_xxx",                    // publishable key only
+  baseUrl: "https://checkout.vonpay.com",      // optional, this is the default
 });
 ```
 
-## VonPayCheckout.checkout(options)
+## VonPay.checkout(options)
 
 Creates a session and immediately redirects the buyer to the checkout page.
 
 ```javascript
-VonPayCheckout.checkout({
+VonPay.checkout({
   amount: 1499,
   currency: "USD",
   successUrl: "https://mystore.com/confirm",
@@ -67,7 +73,7 @@ VonPayCheckout.checkout({
 | `lineItems` | array | No | Order items |
 | `metadata` | object | No | Key-value pairs |
 
-## VonPayCheckout.button(selector, options)
+## VonPay.button(selector, options)
 
 Attach checkout to a button click:
 
@@ -75,9 +81,9 @@ Attach checkout to a button click:
 <button id="pay-btn">Buy Now — $14.99</button>
 
 <script>
-  VonPayCheckout.configure({ apiKey: "vp_sk_live_xxx" });
+  VonPay.configure({ apiKey: "vp_pk_live_xxx" });
 
-  VonPayCheckout.button("#pay-btn", {
+  VonPay.button("#pay-btn", {
     amount: 1499,
     currency: "USD",
     successUrl: "https://mystore.com/confirm",
@@ -104,9 +110,9 @@ The button is automatically disabled and dimmed while the session is being creat
 
   <script src="https://checkout.vonpay.com/vonpay.js"></script>
   <script>
-    VonPayCheckout.configure({ apiKey: "vp_sk_test_xxx" });
+    VonPay.configure({ apiKey: "vp_pk_test_xxx" });
 
-    VonPayCheckout.button("#pay-btn", {
+    VonPay.button("#pay-btn", {
       amount: 1499,
       currency: "USD",
       successUrl: "https://mystore.com/order/123/confirm",
@@ -122,7 +128,9 @@ The button is automatically disabled and dimmed while the session is being creat
 
 ## Security Note
 
-vonpay.js exposes your API key in the browser. This is safe because the API key can only create checkout sessions — it cannot read data, issue refunds, or perform any destructive operation.
+`vonpay.js` requires a publishable key (`vp_pk_*`). Publishable keys can only create checkout sessions — they cannot read session data, issue refunds, or perform any destructive operation. This is what makes it safe to ship in browser code.
+
+Secret keys (`vp_sk_*`) must never appear in frontend code; `vonpay.js` will refuse to run with one.
 
 ## Browser Support
 

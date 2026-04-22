@@ -25,9 +25,9 @@ const vonpay = new VonPayCheckout("vp_sk_live_xxx");
 // With options — pass a config object
 const vonpay = new VonPayCheckout({
   apiKey: "vp_sk_live_xxx",
-  apiVersion: "2026-01-01",
+  apiVersion: "2026-04-14",
   baseUrl: "https://checkout.vonpay.com", // default
-  maxRetries: 3,                          // default
+  maxRetries: 2,                          // default
   timeout: 30_000,                        // ms, default
 });
 ```
@@ -136,7 +136,7 @@ app.post("/webhooks/vonpay", express.raw({ type: "application/json" }), (req, re
       req.headers["x-vonpay-timestamp"]
     );
 
-    switch (event.type) {
+    switch (event.event) {
       case "session.succeeded":
         console.log(`Paid: ${event.transactionId}`);
         break;
@@ -210,16 +210,16 @@ Check API health and latency.
 
 ```typescript
 const health = await vonpay.health();
-// health.status    => "healthy"
+// health.status    => "ok"        // "ok" | "degraded" | "down"
 // health.latencyMs => 42
-// health.version   => "2026-01-01"
+// health.version   => "2026-04-14"
 ```
 
 ---
 
 ## Auto-Retry
 
-The SDK automatically retries on `429` (rate-limited) and `5xx` (server error) responses with exponential backoff. It reads the `Retry-After` header when present, capped at 60 seconds. Configure with `maxRetries` in the constructor (default: 3).
+The SDK automatically retries on `429` (rate-limited) and `5xx` (server error) responses with exponential backoff. It reads the `Retry-After` header when present, capped at 60 seconds. Configure with `maxRetries` in the constructor (default: 2).
 
 ---
 
@@ -236,9 +236,9 @@ try {
   if (err instanceof VonPayError) {
     console.error(err.message);    // "Invalid API key"
     console.error(err.status);     // 401
-    console.error(err.code);       // "invalid_api_key"
-    console.error(err.fix);        // "Check your API key starts with vp_sk_"
-    console.error(err.docs);       // "https://docs.vonpay.com/sdks/node-sdk#error-handling"
+    console.error(err.code);       // "auth_invalid_key"
+    console.error(err.fix);        // "Check that your API key is correctly formatted and active"
+    console.error(err.docs);       // "https://docs.vonpay.com/reference/security#key-types"
     console.error(err.requestId);  // "req_abc123"
     console.error(err.rateLimit);  // { limit: 100, remaining: 0, reset: 1710000000 }
   }
@@ -254,21 +254,27 @@ import type { ErrorCode } from "@vonpay/checkout-node";
 
 function handleError(code: ErrorCode) {
   switch (code) {
-    case "invalid_api_key":
-    case "missing_api_key":
-    case "key_expired":
+    case "auth_missing_bearer":
+    case "auth_invalid_key":
+    case "auth_key_expired":
+    case "auth_key_type_forbidden":
+    case "auth_merchant_inactive":
+    case "auth_service_unavailable":
       // authentication errors
       break;
-    case "invalid_amount":
-    case "invalid_currency":
-    case "missing_required_field":
+    case "validation_error":
+    case "validation_missing_field":
+    case "validation_invalid_amount":
       // validation errors
       break;
-    case "rate_limited":
+    case "rate_limit_exceeded":
+    case "rate_limit_exceeded_per_key":
       // back off
       break;
-    case "session_expired":
     case "session_not_found":
+    case "session_expired":
+    case "session_wrong_state":
+    case "session_integrity_error":
       // session errors
       break;
     // ... exhaustive handling
@@ -286,14 +292,14 @@ function handleError(code: ErrorCode) {
 |-------|---------------|
 | `session.succeeded` | `transactionId`, `amount`, `currency` |
 | `session.failed` | `error`, `failureCode` |
-| `session.expired` | `sessionId`, `expiresAt` |
+| `session.expired` | `sessionId`, `timestamp` |
 | `refund.created` | `refundId`, `amount`, `currency` |
 
 ```typescript
 import type { WebhookEvent } from "@vonpay/checkout-node";
 
 function handle(event: WebhookEvent) {
-  switch (event.type) {
+  switch (event.event) {
     case "session.succeeded":
       // event.transactionId is typed here
       break;
@@ -317,7 +323,7 @@ All types are exported:
 
 ```typescript
 import type {
-  VonPayConfig,
+  VonPayCheckoutConfig,
   CreateSessionParams,
   CheckoutSession,
   SessionStatus,

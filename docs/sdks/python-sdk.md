@@ -90,8 +90,8 @@ event = client.webhooks.construct_event(
     timestamp=request.headers["X-VonPay-Timestamp"],
 )
 
-print(event.type)        # "session.succeeded"
-print(event.session_id)  # "vp_cs_test_abc123"
+print(event.event)        # "session.succeeded"
+print(event.session_id)   # "vp_cs_test_abc123"
 ```
 
 ## Return URL Verification
@@ -136,7 +136,7 @@ See [Handle the Return](../integration/handle-return.md) for a full walkthrough 
 ```python
 health = client.health()
 
-print(health.status)   # "healthy"
+print(health.status)   # "ok"  # "ok" | "degraded" | "down"
 print(health.version)  # "2026-04-14"
 ```
 
@@ -153,11 +153,11 @@ try:
     session = client.sessions.create(amount=-1, currency="USD")
 except VonPayError as e:
     print(e.status)  # 400
-    print(e.code)    # "validation_error"
-    print(e.fix)     # "Amount must be a positive integer in smallest currency unit."
-    print(e.docs)    # "https://docs.vonpay.com/reference/error-codes"
+    print(e.code)    # "validation_invalid_amount"
+    print(e.fix)     # "Amount must be a positive integer in minor units (cents). 1499 = $14.99"
+    print(e.docs)    # "https://docs.vonpay.com/integration/create-session#required-fields"
 ```
 
 ## Auto-Retry
 
-The SDK automatically retries on `429` (rate limited) and `5xx` (server error) responses using exponential backoff. No configuration needed.
+The SDK automatically retries on `429` (rate limited) and `5xx` (server error) responses using exponential backoff. Default is 2 retries; configure with the `max_retries` constructor argument.

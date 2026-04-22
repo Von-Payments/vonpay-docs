@@ -14,12 +14,6 @@ Set the `Von-Pay-Version` request header to pin your integration to a specific A
 Von-Pay-Version: 2026-04-14
 ```
 
-Every response includes a `Von-Pay-Latest-Version` header indicating the most recent version available:
-
-```
-Von-Pay-Latest-Version: 2026-04-14
-```
-
 ## Default Behavior
 
 If the `Von-Pay-Version` header is omitted, the API uses your account's default version. This is the version that was current when your account was created.
@@ -31,8 +25,8 @@ All SDKs accept an `apiVersion` configuration option that sets the version heade
 **Node.js:**
 
 ```typescript
-const vonpay = new VonPay({
-  apiKey: "vp_key_live_xxx",
+const vonpay = new VonPayCheckout({
+  apiKey: "vp_sk_live_xxx",
   apiVersion: "2026-04-14",
 });
 ```

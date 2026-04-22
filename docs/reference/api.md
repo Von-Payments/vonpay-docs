@@ -15,11 +15,13 @@ The complete Von Payments Checkout API is documented in OpenAPI 3.1 format.
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `POST` | `/v1/sessions` | Bearer | Create a checkout session |
+| `POST` | `/v1/sessions?dry_run=true` | Bearer | Validate params without creating a session |
 | `GET` | `/v1/sessions/{id}` | Bearer | Get session status |
 | `POST` | `/api/checkout/init` | None (internal) | Initialize payment embed |
 | `POST` | `/api/checkout/complete` | None (internal) | Finalize payment |
-| `POST` | `/api/webhooks/provider` | Signature | Receive payment webhooks |
-| `GET` | `/api/health` | None | Health check |
+| `POST` | `/api/webhooks/vp_gw_m4x7` | Signature (provider) | Inbound provider webhook (Gr4vy) |
+| `POST` | `/api/webhooks/vp_gw_r8k2` | Signature (provider) | Inbound provider webhook (Stripe) |
+| `GET` | `/api/health` | None | Health check (add `?deep=true` for deep variant) |
 
 Endpoints marked "internal" are called by the hosted checkout page, not by merchants.
 
@@ -49,5 +51,5 @@ Every response includes:
 | Header | Description |
 |--------|-------------|
 | `X-Request-Id` | Unique request ID for debugging |
-| `X-RateLimit-Remaining` | Remaining requests in the current window |
-| `Von-Pay-Version` | The API version used for this request |
+
+Rate-limit headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`) are emitted only on `429` responses. See [Rate Limits](rate-limits.md).

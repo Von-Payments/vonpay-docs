@@ -33,43 +33,32 @@ All errors return JSON with `error`, `code`, `fix`, and `docs` fields, plus an `
 |------|------|-------------|
 | `auth_missing_bearer` | 401 | No `Authorization: Bearer` header provided |
 | `auth_invalid_key` | 401 | API key is malformed or does not exist |
-| `auth_key_type_forbidden` | 403 | Using a test key in production or a live key in sandbox |
-| `auth_merchant_inactive` | 403 | Merchant account is disabled or suspended |
+| `auth_key_expired` | 401 | Key has rotated past its grace window or been force-deactivated mid-rotation |
+| `auth_key_type_forbidden` | 403 | Publishable key used on a secret-only endpoint, or sandbox/live mode mismatch |
+| `auth_merchant_inactive` | 401 | Merchant account is disabled or suspended |
 | `auth_service_unavailable` | 503 | Authentication service is temporarily unavailable |
 | `session_not_found` | 404 | Session ID does not exist |
 | `session_expired` | 410 | Session has expired (30-minute TTL) |
-| `session_wrong_state` | 409 | Session is in the wrong state for this operation (e.g., already completed) |
-| `session_integrity_error` | 409 | Session data integrity check failed |
+| `session_wrong_state` | 409 | Session is in the wrong state for this operation |
+| `session_integrity_error` | 500 | Internal session state mismatch — contact support |
 | `validation_error` | 400 | Request body failed schema validation |
 | `validation_missing_field` | 400 | A required field is missing from the request body |
 | `validation_invalid_amount` | 400 | Amount is not a positive integer or exceeds maximum |
-| `merchant_not_configured` | 400 | Merchant is missing required configuration (e.g., payment provider credentials) |
-| `rate_limit_exceeded` | 429 | Too many requests — retry after the `Retry-After` interval |
+| `merchant_not_configured` | 422 | Merchant is missing required configuration (e.g., payment provider credentials) |
+| `rate_limit_exceeded` | 429 | Per-IP rate limit — retry after the `Retry-After` interval |
+| `rate_limit_exceeded_per_key` | 429 | Per-API-key rate limit (30 session-creates/min) — contact support if you need a higher ceiling |
 | `provider_unavailable` | 502 | Upstream payment provider is not responding |
 | `internal_error` | 500 | Unexpected server error |
 | `webhook_missing_signature` | 401 | Webhook request is missing the signature header |
 | `webhook_invalid_signature` | 401 | Webhook signature does not match the expected value |
-| `webhook_not_configured` | 400 | Webhook endpoint is not configured for this merchant |
+| `webhook_not_configured` | 503 | Webhook verification secret is not configured on the server |
 | `origin_forbidden` | 403 | Request origin is not in the merchant's allowed origins list |
-| `transaction_verification_failed` | 400 | Transaction could not be verified with the payment provider |
+| `transaction_verification_failed` | 403 | Transaction could not be verified with the payment provider |
 | `unsupported_media_type` | 415 | Content-Type header is missing or not `application/json` |
 
-## Rate Limits
+24 codes total.
 
-| Endpoint | Limit | Window |
-|----------|-------|--------|
-| `POST /v1/sessions` | 10 requests | 1 minute |
-| `POST /api/checkout/init` | 20 requests | 1 minute |
-| `POST /api/checkout/complete` | 20 requests | 1 minute |
-| `POST /api/webhooks/provider` | 100 requests | 1 minute |
-
-Rate limits are per IP address. When exceeded, the response includes:
-
-```
-HTTP/1.1 429 Too Many Requests
-Retry-After: 60
-X-RateLimit-Remaining: 0
-```
+Rate-limit buckets are documented on the [Rate Limits](rate-limits.md) page.
 
 ## Validation Errors (400)
 
@@ -117,9 +106,13 @@ Each error code emitted in a response body (`docs` field) links to its section b
 
 **HTTP:** 401. The API key is malformed, unknown, or has been revoked. Check the prefix (`vp_sk_test_`, `vp_sk_live_`, `vp_pk_test_`, `vp_pk_live_`) and confirm the key exists in `/dashboard/developers/api-keys`. If you just rotated, double-check the grace window hasn't expired.
 
+### auth_key_expired
+
+**HTTP:** 401. Key rotated past its 24-hour grace window, or was force-deactivated mid-rotation. Distinct from `auth_invalid_key` so SDKs can detect rotation and fetch a fresh key instead of failing the request. Get a fresh key from `/dashboard/developers/api-keys`.
+
 ### auth_key_type_forbidden
 
-**HTTP:** 403. You used a test-mode key against a live endpoint, a live key against a sandbox endpoint, or a publishable key against a secret-only endpoint (e.g. `GET /v1/sessions/:id`). Match the key type to the operation.
+**HTTP:** 403. Primary cause: a publishable key (`vp_pk_*`) used against a secret-only endpoint like `GET /v1/sessions/:id`. Also fires on sandbox/live-mode mismatches. The `fix` field on the response tells you exactly what to switch to.
 
 ### auth_merchant_inactive
 
@@ -143,7 +136,7 @@ Each error code emitted in a response body (`docs` field) links to its section b
 
 ### session_integrity_error
 
-**HTTP:** 409. Session data integrity check failed. This is rare and usually indicates a race condition between webhook delivery and a follow-up API call. Retry after the webhook delivery settles.
+**HTTP:** 500. Internal session state mismatch. Rare; indicates session metadata in the database no longer matches an invariant the runtime expects. Capture the `X-Request-Id` and contact support — this is not safely retriable without investigation.
 
 ### validation_error
 
@@ -159,11 +152,15 @@ Each error code emitted in a response body (`docs` field) links to its section b
 
 ### merchant_not_configured
 
-**HTTP:** 400. The merchant is missing required configuration for this operation — usually payment-provider credentials (Stripe account not boarded, Gr4vy binding not provisioned, etc.). Check `/ops/applications/[id]` or contact support.
+**HTTP:** 422. The merchant has not completed onboarding for this operation — usually payment-provider credentials (Stripe Connect account not boarded, Gr4vy binding not provisioned, etc.). Complete boarding via the merchant dashboard, or contact support.
 
 ### rate_limit_exceeded
 
-**HTTP:** 429. Too many requests. Retry after the `Retry-After` interval. SDK auto-retries up to `maxRetries` times.
+**HTTP:** 429. Per-IP bucket exceeded. Retry after the `Retry-After` interval. SDK auto-retries up to `maxRetries` times.
+
+### rate_limit_exceeded_per_key
+
+**HTTP:** 429. Per-API-key bucket exceeded on `POST /v1/sessions` (30 session creates/min). A single key should not exceed this under normal traffic. If your integration legitimately does, contact support for a ceiling increase. Distinct from `rate_limit_exceeded` so SDKs can tell them apart.
 
 ### provider_unavailable
 
@@ -183,7 +180,7 @@ Each error code emitted in a response body (`docs` field) links to its section b
 
 ### webhook_not_configured
 
-**HTTP:** 400. No webhook endpoint is configured for this merchant. Register one at `/dashboard/developers/webhooks`.
+**HTTP:** 503. Webhook verification secret is not configured on the Von Payments server side. This is an infra-level misconfiguration, not a merchant-side issue. Capture the `X-Request-Id` and contact support.
 
 ### origin_forbidden
 
@@ -191,7 +188,7 @@ Each error code emitted in a response body (`docs` field) links to its section b
 
 ### transaction_verification_failed
 
-**HTTP:** 400. Transaction could not be verified with the payment processor. Usually a processor-side reconciliation failure; retriable once the processor clears.
+**HTTP:** 403. Transaction could not be verified with the payment processor. Contact support with the `X-Request-Id` — this is not safely retriable without investigation (a transaction either exists on the processor or it doesn't).
 
 ### unsupported_media_type
 
