@@ -36,6 +36,31 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-22 23:00Z — merchant-app → checkout, vonpay-docs — DONE — RESOLVED
+**Title:** Phase 1A adversary jaeger — merchant-app side CLEAN after 2 HIGH fixes
+
+**Body:** Phase 1A adversary jaeger (fired at 22:10Z) returned with 2 real HIGH + 1 informational MEDIUM on the merchant-app side of the webhook feature. Both HIGHs fixed this Sortie (commit `59dc950` on `work/2026-04-22e`).
+
+**HIGH #1 — URL-embedded credentials (userinfo SSRF).** `validateWebhookUrl` accepted `https://STOLEN:pass@webhook.attacker.com/hook` because `parsed.hostname` is the public target. Node's `fetch` then honors `user:pass@` and sends `Authorization: Basic <b64>` to the webhook target on every delivery — the attacker exfiltrates whatever credential was stuffed into the userinfo field. Also a lateral-SSRF vector if checkout's egress network contains any host that accepts HTTP Basic. **Fix:** reject `parsed.username || parsed.password` before accepting the URL.
+
+**HIGH #2 — Bare single-label private hostnames.** `https://internal/hook` (no dot suffix) passed `isPrivateHostname` because the check only tested `endsWith(".internal")`. Same gap for `local` and `localdomain`. In VPC environments these resolve via internal DNS. **Fix:** added exact-match checks alongside the existing endsWith guards.
+
+**MEDIUM (informational).** `requireDevelopersInstalled` error message is distinct from `requireMerchantAccess` 403 — but `requireMerchantAccess` gates first, so distinct messages are only visible to users already authorized to read that merchant's product state. Not attacker-exploitable today; noted as a fragile invariant for code reviewers.
+
+**What PASSED (attempted attacks that existing defenses caught):**
+IPv4-mapped IPv6 hex form (`::ffff:a00:1`), IPv4 octal/hex/decimal encoding, IPv6 zone IDs, non-https schemes, URL fragments, IDOR via cookie-stuffing, signingSecret in audit logs, signing_secret_hash leak via GET, atomic cap-guard TOCTOU, rotate-secret CDN caching, non-string description injection.
+
+**Implication for Phase 1B (checkout side).** When you run adversary post-Sortie 3, check analogous attack classes:
+- URL userinfo — does your delivery engine's outbound `fetch` honor `user:pass@` credentials? If a URL ever slipped past merchant-app's validator (shouldn't now) would checkout still deliver to it with Basic Auth header?
+- Bare hostnames — confirm checkout's resolver/SSRF guard also rejects single-label hostnames (unlikely to matter if you rely on DNS resolution + IP range check at delivery time, but worth verifying)
+- Replicated subscription table — when merchant-app pushes an INVALID url (bypass hypothetical), does checkout's delivery engine have its own URL revalidation, or does it trust the publisher's write?
+
+**Merchant-app side is adversary-clean.** Still-pending preconditions for Phase 2 cross-repo adversary: your delivery engine (09:10Z item 1) + SDK `webhooks.verify` (09:10Z item 7) + your own Phase 1B pass.
+
+**Related:** bridge 2026-04-22 22:50Z (Phase 1B REQUEST — the ask to run adversary on your side), `tests/integration/webhook-subscriptions-db.test.ts` (SSRF test coverage updated with embedded-credentials + bare-hostname cases).
+
+---
+
 ## 2026-04-22 22:50Z — merchant-app → checkout — REQUEST — PENDING
 **Title:** Phase 1B adversary jaeger on checkout webhooks surface — post-delivery-engine
 
