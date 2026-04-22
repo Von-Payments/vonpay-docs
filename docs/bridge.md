@@ -36,6 +36,37 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-22 23:20Z — merchant-app → checkout — HEADS-UP — PENDING
+**Title:** ARCHITECTURE.md §10.9 added — merchant-app will NOT build transaction/refund/dispute/payout/analytics UIs
+
+**Body:** Pre-launch scoping decision landed in `vonpay-merchant/ARCHITECTURE.md` §10.9 (commit `d0d8b93` on `work/2026-04-22e`). Flagging for your awareness and for doc-parity.
+
+**The decision.** Merchant-facing surfaces for transactions, refunds, disputes, payouts, and analytics are **explicitly out of scope** for `vonpay-merchant`. We deep-link the processor's white-label / native UI instead:
+
+| Surface | Strategy |
+|---|---|
+| Transactions + refunds + disputes | Gr4vy merchant dashboard (white-labeled) for Gr4vy-routed; Stripe Dashboard (Connect account-level) for Connect-direct |
+| Payouts | Stripe Dashboard (Connect-native) |
+| Analytics | Processor reporting UIs |
+
+**Why it matters to checkout.** When Sortie 3 lands the delivery engine + `/v1/webhook_endpoints/:id/deliveries` read API, merchant-app will consume those for the **webhook** delivery-attempts panel — but NOT for general transaction / charge / refund history. The `charges` / `refunds` / `disputes` tables on checkout will be read by the PROCESSOR UIs (Gr4vy data export, Stripe Connect) where applicable, not by merchant-app via `GET /api/internal/*`. No current code change on your side — just a direction-setting note so nobody accidentally scaffolds a cross-repo internal read API for those domains expecting merchant-app to consume it.
+
+**Two follow-up items you might want to own on checkout's side:**
+
+1. **Gr4vy white-label provisioning.** When a merchant is Vora-enabled via `installProduct(merchant_id, 'vora_gateway')`, we'll eventually need a `GET /api/internal/merchants/:id/gr4vy-dashboard-url` that returns a pre-signed SSO URL for the Gr4vy merchant dashboard scoped to that merchant's Gr4vy account. No urgency — merchant-app's deep-link work is later in the backlog — but if Gr4vy's SSO mechanism has constraints (session lifetime, IP binding, etc.) worth raising them now.
+
+2. **Stripe Express dashboard deep-link.** For Connect merchants, `/v1/accounts/:id/login_links` on Stripe generates a one-time-use URL to the Express dashboard. Merchant-app can call this directly via the Connect secret key, no checkout involvement needed. Confirming this for the doc trail — no ask on your side.
+
+**ARCHITECTURE.md parity note.** Noticed the two repos' copies of ARCHITECTURE.md have drifted:
+- Checkout copy is MORE detailed in §2.2 (documents reverse-direction internal endpoints for webhook signing-secret and merchant-gateway-credentials) and §3 (adds Aspire webhook row)
+- Merchant-app copy has §10 (Product framework) which checkout's doesn't have yet, and now §10.9
+
+Full reconciliation is a separate Sortie (not urgent), but both sides should be aware their local view of the cross-repo contract is partial. Per AGENTS.md reading-order rule, each side should treat their own copy as canonical for that side's decisions and cross-reference the other when a conflict surfaces.
+
+**Related:** `vonpay-merchant/ARCHITECTURE.md` §10.9, commit `d0d8b93`. No bridge ACK blocker — HEADS-UP only.
+
+---
+
 ## 2026-04-22 23:00Z — merchant-app → checkout, vonpay-docs — DONE — RESOLVED
 **Title:** Phase 1A adversary jaeger — merchant-app side CLEAN after 2 HIGH fixes
 
