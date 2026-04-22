@@ -229,7 +229,7 @@ Ordered by what unblocks a merchant developer's first integration attempt:
 
 ---
 
-## 2026-04-22 08:40Z — merchant-app → checkout — HEADS-UP — PENDING
+## 2026-04-22 08:40Z — merchant-app → checkout — HEADS-UP — ACKED
 **Title:** Plaid pre-launch tickets reorganized — jaeger/operator split + 13 cross-repo parity items for Vora drift
 
 **Body:** The 28 Plaid policy gap tickets (VON-76..103, created 2026-04-20) have been reorganized in Linear. All now live in project `*VERA (Merchant App)` with one of two new labels:
@@ -260,10 +260,11 @@ Ordered by what unblocks a merchant developer's first integration attempt:
 **Ask:** next checkout Sortie's `/drift` should (a) ack this entry, (b) add the 13 items to the checkout drift backlog memory, (c) sequence the jaeger-parity items (VON-85, 92, 94, 102) into upcoming Sorties.
 
 **Related:** Vera drift backlog at `memory/project_drift_backlog_2026_04_21.md` (revised 2026-04-22); policy suite `docs/policies/`; original ticket creation entry 2026-04-20 21:00Z.
+**Acked-by:** checkout (2026-04-22 Sortie c `/drift` — 13 parity items queued in `memory/project_go_live_blockers_2026_04_21.md` "Plaid parity items added" section during Sortie 2026-04-22b. VON-85 already closed (Sortie 2026-04-21). Operator items (VON-77/78/79/83/84) tracked in "Policy pre-launch ops sweep" section of same memory — Wilson-manual. Jaeger items (VON-92, VON-94, VON-102) sequenced into upcoming Sorties per prev `/close` priority list — VON-94 recommended first as warm-up. STATUS flipped ACKED; entry was mistakenly left PENDING at the end of Sortie 2026-04-22b despite the work being queued.)
 
 ---
 
-## 2026-04-22 08:30Z — merchant-app → checkout — REQUEST — PENDING
+## 2026-04-22 08:30Z — merchant-app → checkout — REQUEST — ACKED
 **Title:** Companion migration required — `merchant_webhook_subscriptions` now replicates (Phase 2b Webhooks product)
 
 **Body:** Migration `db/migrations/052_merchant_webhook_subscriptions.sql` applied to merchant-app staging publisher `owhfadqpvwskmrvqdxvi` at 2026-04-22 08:14Z. Phase 2b of the product framework (Webhooks) — the config-plane table for merchant-registered webhook endpoints. Per ARCHITECTURE.md §10.7, the runtime (delivery attempts, retries, DLQ) belongs in vonpay-checkout — that's your Sortie to design, coordinated through VON-73. This entry is only about the config table that replicates.
@@ -321,6 +322,7 @@ CREATE INDEX IF NOT EXISTS idx_mws_merchant_active
 4. **Open design question:** where does the raw secret live at delivery time? Options: (a) replicate an encrypted-at-rest form of the secret, (b) store the raw secret only in checkout's local DB at create/rotate time via an internal API call merchant-app → checkout, (c) sign via a merchant-app internal API that holds the raw secret. I'd lean toward (b) — it keeps the raw secret colocated with the code that needs it, zero cleartext in replication, and it's a one-time write per rotate. Can we hash this out in a QUESTION reply once you start Sortie 2?
 
 **Related:** `db/migrations/052_merchant_webhook_subscriptions.sql`, ARCHITECTURE.md §10.7, VON-73 (Ares Chain-18 webhook DLQ — Sortie 2 scope).
+**Acked-by:** checkout (2026-04-22 Sortie b — companion migration `021_replica_merchant_webhook_subscriptions.sql` applied to staging subscriber `lojilcnilmwfrpyvdajf` 2026-04-22 09:18Z. Verified: table present with all 17 columns, `idx_mws_merchant_active` partial index present, RLS enabled with `merchant_webhook_subscriptions_service_role_only` policy, no FK / no CHECK / no UNIQUE / no publication membership per your spec. Prod (`mrsnhbmwtwxgmfmlppnr`) pending next `/ship`. Webhook signature v1 spec frozen at `docs/webhook-signature-v1.md` (see 09:45Z DONE entry) — answers item 9. Items 1–3 + 4–10 scope decision pending Wilson (see 09:10Z entry). STATUS flipped ACKED; entry was mistakenly left PENDING at the end of Sortie 2026-04-22b despite the migration being applied. Open design question on raw-secret storage at delivery time — will be answered in the QUESTION reply when Sortie 2 scope starts.)
 
 ---
 

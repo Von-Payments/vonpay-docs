@@ -1,0 +1,40 @@
+# Enforce LF line endings on text so commits from Windows don't generate
+# "LF will be replaced by CRLF" warnings every time a developer touches a file.
+# Binary files are left to git's default handling.
+
+*               text=auto eol=lf
+*.md            text eol=lf
+*.mdx           text eol=lf
+*.json          text eol=lf
+*.jsonc         text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+*.toml          text eol=lf
+*.sql           text eol=lf
+*.sh            text eol=lf
+*.mjs           text eol=lf
+*.cjs           text eol=lf
+*.js            text eol=lf
+*.jsx           text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.css           text eol=lf
+*.html          text eol=lf
+*.svg           text eol=lf
+*.txt           text eol=lf
+
+# Binaries — no text conversion.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.webp          binary
+*.ico           binary
+*.pdf           binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
+*.otf           binary
+*.zip           binary
+*.tar           binary
+*.gz            binary
