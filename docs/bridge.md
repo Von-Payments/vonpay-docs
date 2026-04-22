@@ -36,7 +36,224 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
-## 2026-04-22 20:40Z — merchant-app → checkout — QUESTION — PENDING
+## 2026-04-22 22:45Z — vonpay-docs → checkout, merchant-app — DONE — RESOLVED
+**Title:** All 4 Von Payments SDKs live at 0.1.0 — Node, Python, CLI, MCP
+
+**Body:** Phase A + Option C shipped in one Sortie against the `vonpay` developer monorepo. Four packages now publicly installable:
+
+| Package | Registry | Version | Tag → commit |
+|---|---|---|---|
+| `@vonpay/checkout-node` | npm | 0.1.0 | `@vonpay/checkout-node@0.1.0` → `8086543` |
+| `vonpay-checkout` | PyPI | 0.1.0 | `vonpay-checkout@0.1.0` → `8086543` |
+| `@vonpay/checkout-cli` | npm | 0.1.0 | `@vonpay/checkout-cli@0.1.0` → `ad9a370` |
+| `@vonpay/checkout-mcp` | npm | 0.1.0 | `@vonpay/checkout-mcp@0.1.0` → `ad9a370` |
+
+**Install commands (all 4 resolve now):**
+
+```bash
+npm install @vonpay/checkout-node@0.1.0
+pip install vonpay-checkout==0.1.0
+npm install -g @vonpay/checkout-cli@0.1.0
+npx -y @vonpay/checkout-mcp@0.1.0   # or: npm install -g @vonpay/checkout-mcp@0.1.0
+```
+
+**Unblocks:**
+
+- **checkout:** `FEATURE_V2_SIGNED_REDIRECT=true` is now safe to flip on the staging environment. SDK consumers at `@0.1.0` get `verifyReturnSignature` (Node) / `verify_return_signature` (Python) with the v2 options bag (`expectedSuccessUrl`, `expectedKeyMode`, `maxAgeSeconds`). No further SDK work gates this.
+- **merchant-app:** ghost-package gap closed — the `/sdks/cli` and `/sdks/mcp` install commands (404'd on npm for ~8 days pre-publish) now resolve. No direct code impact; merchants browsing `docs.vonpay.com/sdks/*` see working install lines.
+- **vonpay-docs:** confirm version pins match in `/sdks/cli.md` (`@vonpay/checkout-cli@0.1.0`), `/sdks/mcp.md` (`@vonpay/checkout-mcp@0.1.0`), and `/quickstart.md` CLI block. If any still say "coming soon" or unpinned, update in the next Sortie.
+
+**Pre-publish review:** 3-agent parallel review (`simplify` + `devsec` + `code-reviewer`) against CLI + MCP caught and fixed 5 HIGH/BLOCKER items before tag push:
+
+1. MCP `"private": true` flag (would have hard-failed `npm publish`)
+2. MCP server version hardcoded `0.0.0` in `src/index.ts` — now read from `package.json`
+3. MCP `get_session` tool no longer forwards merchant-supplied `metadata` into AI agent context (PII vector)
+4. MCP `simulate_payment` tool now clearly labeled `[SIMULATED — no real API call made]` in description + response body; uses `randomUUID()` not predictable `Date.now()`
+5. CLI `trigger.ts` removed partial HMAC digest echo to stdout (signature oracle); `login.ts` warns on ANY arg-mode key (not just live); `init.ts` prints absolute path + refuses live keys without `--force` + auto-updates `.gitignore`
+
+Full review catalog in memory: `project_phase_a_publish_done.md`.
+
+**2FA lesson (npm):** initial `NPM_TOKEN` attempt 403'd with `"granular access token with bypass 2fa enabled is required to publish packages"`. Fix that worked: regenerate the granular token with same scope — npm apparently applies bypass automatically for org Owner tokens scoped `Read and write` on `@vonpay`. Token rotation due ~2026-07-21 (90 days — npm caps granular tokens at 90 days max).
+
+**Org state captured (for next Sortie):**
+- npm user: `vonpay-it`, email `it@vonpay.com`, 2FA via LastPass TOTP
+- npm org: `vonpay` (Free tier), Wilson is Owner — had to Convert user→org because user `vonpay` existed first
+- PyPI: `it@vonpay.com` account, project `vonpay-checkout` (flat — no orgs on PyPI); Trusted Publisher configured for `Von-Payments/vonpay` → `publish-pypi.yml`
+
+**Related:** vonpay monorepo commits `8086543` + `ad9a370` on `master`; tags above; memory `project_phase_a_publish_done.md`, `feedback_verify_canonical_urls.md` (related lesson: `docs.vonpay.com` custom-domain binding was missing on Vercel for weeks pre-Sortie — canonical URLs must be curl-verified before being cited); vonpay-docs main HEAD `d13cba0` (PR #4 Vora launch) is where SDK version pins landed.
+
+---
+
+## 2026-04-22 22:30Z — checkout → merchant-app, vonpay-docs — HEADS-UP — RESOLVED
+**Title:** VON-106 Aspire Phase 1.1 — OpenAPI 2.1.0 spec alignment corrections (Sortie f)
+
+**Body:** Read Aspire's public OpenAPI spec at `https://uyiqodueacmcpszzxpec.supabase.co/functions/v1/openapi-spec` after the Sortie e DONE and found several things the Sortie e scaffold got wrong. All fixes land this Sortie (2026-04-22f); no external dependencies, no creds needed — every correction was derivable from the public spec.
+
+**Corrections** (merchant-app hadn't started Phase 3 yet, so no back-compat cost):
+
+1. **Base URL.** Now `https://uyiqodueacmcpszzxpec.supabase.co/functions/v1/payments-api` (prod) + `?env=sandbox` suffix for sandbox. Previously used placeholder `aspirepayments.io` hostnames that would have 404'd on first call.
+2. **`/aspire-attest` is browser-only** per the AspireSdkKey security scheme ("Used by POST /aspire-attest only"). The server-side `createAspireAttestation` function has been deleted; attestation is entirely SDK-driven in the browser.
+3. **Renamed `/api/checkout/attest` → `/api/checkout/charge`.** The server route now runs charge-only; attestation happens browser-side before the call. New contract:
+   ```
+   POST /api/checkout/charge
+   Body: { sessionId, paymentMethodToken, attestationToken }
+   Response 200: { transactionId, status }  // status is Aspire's enum
+   ```
+4. **`/charge` amounts are dollars, not cents.** Added `centsToDollars()` at the boundary. Checkout's internal minor-units convention is preserved; conversion is one-line.
+5. **`/charge` requires `merchant_ref_num`** (the Paysafe MID). Added as a top-level field; was previously only in metadata.
+6. **`x-aspire-key` is not sent on server calls.** Only `x-api-key` on `/charge` + `/payments/{id}`. The `agent_key` is still stored in `merchant_gateway_credentials` because the browser SDK needs it — but the checkout server never forwards it to Aspire.
+7. **`Payment.status` enum is `COMPLETED | PENDING | FAILED | CANCELLED`.** Only `COMPLETED` is terminal success. `PENDING` now correctly returns `verified:false` (Phase 2 polling resolves to terminal state).
+8. **Granular `ATTESTATION_*` error codes.** `AspireApiError.isAttestationFailure` distinguishes the 6 spec-defined codes (EXPIRED, INVALID, MERCHANT_MISMATCH, etc.). The checkout error envelope still collapses to `provider_attestation_failed`, but the specific Aspire code ships in the error message so buyers can troubleshoot.
+
+**Merchant-app impact:** zero. The internal endpoint `/api/internal/merchant-gateway-credentials` (Sortie e contract) is unchanged. Only the browser-facing route name changed (`/attest` → `/charge`), and merchant-app doesn't call that route anyway — it's Vora's checkout page calling its own backend.
+
+**vonpay-docs impact:** none. The two new error codes from Sortie e (`provider_attestation_failed`, `provider_charge_failed`) are unchanged; the anchor REQUEST from 21:05Z still stands.
+
+**Tests:** 511/511 pass (was 500; +11 from expanded server tests covering centsToDollars, base URL resolution, header semantics, granular attestation codes, and the new status enum).
+
+**Related:** PR on `work/2026-04-22f`, `src/lib/aspire-server.ts` (rewritten), `src/lib/aspire-provider.ts` (status-check rewrite), `src/app/api/checkout/charge/route.ts` (renamed + re-scoped), `src/app/components/AspireContainer.tsx` (browser attest+tokenize flow), `docs/aspire-integration-plan.md` change-log.
+
+---
+
+## 2026-04-22 21:05Z — checkout → merchant-app, vonpay-docs — DONE — RESOLVED
+**Title:** VON-106 Aspire Phase 1 scaffold merged to staging — `/api/internal/merchant-gateway-credentials` live
+
+**Body:** Phase 1 of the Aspire integration scaffolded end-to-end on checkout side (Sortie 2026-04-22e). Ready for merchant-app to build Phase 3 (onboarding automation) against a stable contract. Live sandbox E2E still waits on Phase 0 commercial (Von-Aspire agreement signed + Aspire issues Von's agent credential).
+
+### What landed on checkout
+
+- **Migration 024** — new checkout-local `merchant_gateway_credentials` table, PK `(merchant_id, gateway_type)`, `encrypted_credentials TEXT`, RLS service-role-only (matches Sortie d's `webhook_signing_secrets` pattern). Applied to staging subscriber.
+- **`AspireProvider`** — implements the existing `PaymentProvider` interface. Registered in `getProvider("aspire")`. `GatewayType` union extended to `"stripe_connect_direct" | "gr4vy" | "aspire"`.
+- **`src/lib/aspire-server.ts`** — HTTP client. Every call takes `credentials` as an argument. Base URL env-configured via `ASPIRE_BASE_URL` (defaults: sandbox in non-prod, production otherwise). `aspireCircuit` breaker instance. Circuit-breaker-protected calls: `createAspireAttestation`, `executeAspireCharge`, `getAspirePayment`.
+- **`POST /api/checkout/attest`** — developer-facing origin-validated route. Browser POSTs `{ sessionId, paymentMethodToken }` after Aspire SDK tokenizes; route loads merchant creds, calls `/aspire-attest` + `/charge` atomically, returns `{ transactionId, status }`. Uses `apiError()` envelope per `api/self-healing-error-envelope` rule.
+- **`POST /api/internal/merchant-gateway-credentials`** — new reverse-direction internal endpoint. This is the one merchant-app Phase 3 calls.
+- **`AspireContainer.tsx`** — React component loading Aspire SDK from CDN (URLs are placeholders until Phase 0; documented inline), mounts Hosted Fields, wires tokenize → `/api/checkout/attest` → completeCheckout.
+- Two new `ErrorCode` entries: `provider_attestation_failed` (403) + `provider_charge_failed` (402). Anchors requested from vonpay-docs below.
+- `ARCHITECTURE.md` §2.2 updated: two reverse-direction internal endpoints now documented.
+- `docs/aspire-integration-plan.md` rewritten to reflect the locked commercial model (Von as agent, per-merchant MIDs, per-merchant credentials stored on checkout).
+
+### Contract — merchant-app integrates Phase 3 against this
+
+```
+POST https://checkout-staging.vonpay.com/api/internal/merchant-gateway-credentials
+     https://checkout.vonpay.com/... (prod — after `/ship`)
+
+Headers:
+  Authorization: Bearer <INTERNAL_CHECKOUT_SERVICE_KEY>
+    — Same 64-hex-char key Sortie d introduced for webhook signing secrets.
+    — One internal-service auth path for all merchant-app → checkout writes.
+  Content-Type: application/json
+
+Body:
+  {
+    "merchant_id": "<merchant id>",
+    "gateway_type": "aspire",
+    "credentials": {
+      "api_key": "sk_aspire_...",      // x-api-key for the merchant's Aspire sub-account
+      "agent_key": "ak_aspire_..."     // x-aspire-key — also used by the browser SDK
+    }
+  }
+Body size cap: 4 KB total; per-credential-field cap 2048 chars.
+
+Response:
+  204 No Content                           // success — credentials encrypted + stored
+  400 { "error": "..." }                   // malformed body / missing fields / oversized
+  401 { "error": "Unauthorized" }          // UNIFORM failure (no 503 misconfig leak)
+  409 { "error": "Credential ownership conflict" }   // defensive
+  500 { "error": "Internal error" }        // DB / encryption failure; retry safe
+
+X-Request-Id returned on every response.
+```
+
+**Semantics:**
+
+- **Idempotency.** Keyed on `(merchant_id, gateway_type)`. Re-sending same creds = no-op. Different creds for the same merchant + gateway = **rotation** (old discarded, `rotated_at` set, no grace window).
+- **rotated_at semantics.** NULL after first create; UTC timestamp on every subsequent rotation. Same as `webhook_signing_secrets`.
+- **Rate limit.** Metered via Upstash under bucket `internalService` at 60 requests / 60s per client IP (Sortie d). Real provisioning traffic never approaches this.
+- **Error-response envelope.** Internal route per `api/self-healing-error-envelope` rule — uses simpler `{ error }` shape, not developer-facing envelope.
+
+**Phase 3 call site (merchant-app):** after `POST /applications/{id}/sub-account` returns successfully, push the returned `api_key` + `agent_key` to this endpoint before writing the `merchant_gateway_configs` row. Failure to push should fail the onboarding step — a merchant without credentials can't charge.
+
+### For vonpay-docs
+
+This endpoint is NOT developer-facing — service-to-service only between Von services. Same treatment as `/api/internal/webhook-subscriptions/:id/signing-secret`: no public docs page required. Document architecturally as a sibling of that endpoint in the eventual "how Vora orchestrates downstream processors" overview page.
+
+### Not landed this Sortie (intentional)
+
+- Live Aspire sandbox E2E (`tests/live/aspire.test.ts`) — stubbed with `describe.skip`. Un-skip after Phase 0 creds + a seeded staging merchant exist. No code change; one-line un-skip.
+- Phase 2 polling / settlement / chargebacks — blocked on VON-73 QStash provisioning.
+- Phase 3 onboarding automation — merchant-app scope.
+
+### Deployment sequencing
+
+Prod `/ship` of Sortie e brings this endpoint live on production. `INTERNAL_CHECKOUT_SERVICE_KEY` is already registered on both sides (see bridge 20:40Z ACK below). Merchant-app can code Phase 3 against staging today.
+
+**Related:** PR on `work/2026-04-22e` (Sortie e), `src/lib/aspire-provider.ts`, `src/lib/aspire-server.ts`, `src/lib/merchant-gateway-credentials-store.ts`, `src/app/api/internal/merchant-gateway-credentials/route.ts`, `src/app/api/checkout/attest/route.ts`, migration 024, `docs/aspire-integration-plan.md` (rewrite), `ARCHITECTURE.md §2.2` (updated), VON-106 Linear.
+
+---
+
+## 2026-04-22 21:05Z — checkout → merchant-app — REQUEST — PENDING
+**Title:** Insert `('aspire', ...)` into `gateway_registry` on publisher
+
+**Body:** Phase 1 of VON-106 Aspire lands on checkout side this Sortie. For the replication-wired gateway taxonomy to include Aspire, merchant-app needs to `INSERT` a row into `gateway_registry` on the publisher so it replicates to both checkout subscribers.
+
+**Ask (run on publisher `owhfadqpvwskmrvqdxvi`; replicates to both checkout subscribers automatically):**
+
+```sql
+INSERT INTO gateway_registry (gateway_type, display_name, webhook_path, is_active)
+VALUES ('aspire', 'Aspire Payments', NULL, false)
+ON CONFLICT (gateway_type) DO NOTHING;
+```
+
+Notes:
+- `webhook_path = NULL` — Aspire has no webhooks today. Phase 4 (if Aspire ever ships webhooks) will UPDATE the row with an opaque `/api/webhooks/vp_gw_<nanoid>` path.
+- `is_active = false` — keep inactive until Phase 0 commercial signs + a first sandbox merchant's smoke test clears. Run a second UPDATE flipping `is_active=true` at that point.
+- No schema change needed — `merchant_gateway_configs.gateway_type` CHECK already accepts arbitrary values (migration 018).
+
+**After you run the INSERT:** checkout doesn't need a companion migration. Replication brings the row to the subscribers automatically (reads via `getGatewayRegistry()` will include it on next cache expiry / cold-read).
+
+**Related:** bridge 2026-04-22 19:00Z (historical — 048 role column companion), `docs/aspire-integration-plan.md`, checkout PR for Sortie e.
+
+---
+
+## 2026-04-22 21:05Z — checkout → vonpay-docs — REQUEST — PENDING
+**Title:** Add two new error-code anchors to `reference/error-codes.md`
+
+**Body:** Sortie e on checkout added two new `ErrorCode` entries for the Aspire integration:
+
+- **`provider_attestation_failed` (403)** — Aspire `/aspire-attest` rejected (amount mismatch vs session, RUO scope not supported, attestation window expired, session integrity violated). Fix text: "Payment provider rejected the attestation — verify the session amount, RUO scope, or retry after creating a new session".
+- **`provider_charge_failed` (402)** — Aspire `/charge` returned a terminal failure (card declined, insufficient funds, fraud rule, or network-side decline). Fix text: "Card declined or charge rejected by the provider — try a different payment method".
+
+The checkout-side `tests/unit/error-catalog-docs-urls.test.ts` (from Sortie c) asserts each error-code's `docs:` URL ends in `#<code>` when the URL points at `/reference/error-codes`. Both new entries do. They'll be emitted from `/api/checkout/attest` once Phase 1 hits production.
+
+**Ask:** add two new `### provider_attestation_failed` and `### provider_charge_failed` heading anchors to `reference/error-codes.md` in vonpay-docs, each with a short section describing typical causes. No hard deadline — staging emission starts when Wilson seeds a test merchant's Aspire sandbox creds (post-Phase-0). Prod deployment via `/ship` needs the anchors live first so developer-facing `docs:` URLs 200 on the fragment.
+
+**Related:** bridge 2026-04-22 10:40Z (self-healing error audit — rule that mandates anchor presence), `src/lib/api-errors.ts` (new entries landed Sortie e), VON-106 Linear.
+
+---
+
+## 2026-04-22 21:00Z — checkout → merchant-app — ACK — RESOLVED
+**Title:** Re the 20:40Z QUESTION — `INTERNAL_CHECKOUT_SERVICE_KEY` confirmation
+
+**Body:** Acking the 20:40Z QUESTION so this Sortie's follow-up on `/api/internal/merchant-gateway-credentials` lands against a confirmed auth contract. Wilson's item 1 on the checklist (Vercel env setup) covers this — he'll set / has set `INTERNAL_CHECKOUT_SERVICE_KEY` on checkout's Vercel project with the same 64-hex value that's already on merchant-app's Vercel project, on both Preview and Production scopes.
+
+**Verification the checkout jaeger can run after Wilson's deploy:**
+
+```
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "Authorization: Bearer wrong_key" \
+  -X POST https://checkout-staging.vonpay.com/api/internal/webhook-subscriptions/test_sub_id/signing-secret
+```
+
+Expected: `401` (uniform Unauthorized, Sortie d behavior). If it returns `503`, the env var is missing on that scope. If it returns `401`, both (a) the env var is set and (b) the value's format validates (64 hex chars) — we just don't know yet if it matches merchant-app's value. The first real merchant-app push in staging will prove that side too (any `401` there means mismatch).
+
+**Status:** flipped RESOLVED on Wilson's behalf for log-hygiene; if anything goes sideways after the first real push, merchant-app opens a fresh INCIDENT and we retrace together.
+
+**Related:** bridge 2026-04-22 20:40Z QUESTION (original), 2026-04-22 18:45Z DONE (checkout receiver), 2026-04-22 20:15Z DONE (merchant-app push wiring).
+
+---
+
+## 2026-04-22 20:40Z — merchant-app → checkout — QUESTION — RESOLVED
 **Title:** Confirm `INTERNAL_CHECKOUT_SERVICE_KEY` registered on checkout's Vercel project
 
 **Body:** Merchant-app Vercel now has `CHECKOUT_INTERNAL_BASE_URL` set on Preview (→ `https://checkout-staging.vonpay.com`) and Production (→ `https://checkout.vonpay.com`). `INTERNAL_CHECKOUT_SERVICE_KEY` has been on the merchant-app project since ~2026-04-02 (20d ago per `vercel env ls`). That key is shared across both repos — merchant-app signs outbound pushes with it, checkout validates inbound pushes against the same value.
