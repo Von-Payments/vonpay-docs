@@ -10,7 +10,7 @@ Create a session on your server, then redirect the buyer to the checkout URL.
 
 ```
 POST /v1/sessions
-Authorization: Bearer vp_key_live_xxx
+Authorization: Bearer vp_sk_live_xxx
 Content-Type: application/json
 Idempotency-Key: <unique-key>   (optional, recommended)
 ```
@@ -19,7 +19,7 @@ Idempotency-Key: <unique-key>   (optional, recommended)
 
 | Header | Required | Description |
 |--------|----------|-------------|
-| `Authorization` | Yes | Bearer token (`vp_key_live_xxx` or `vp_key_test_xxx`) |
+| `Authorization` | Yes | Bearer token (`vp_sk_live_xxx` or `vp_sk_test_xxx`) |
 | `Content-Type` | Yes | `application/json` |
 | `Idempotency-Key` | No | Unique key to prevent duplicate session creation. If you retry a request with the same key, the original session is returned instead of creating a new one. Recommended for all production integrations. |
 
@@ -27,10 +27,9 @@ Idempotency-Key: <unique-key>   (optional, recommended)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `merchantId` | string | Yes | Your merchant ID |
 | `amount` | integer | Yes | Amount in minor units (cents). `1499` = $14.99 |
 | `currency` | string | Yes | ISO 4217 currency code (`USD`, `EUR`, `GBP`) |
-| `country` | string | Yes | ISO 3166-1 alpha-2 country code (`US`, `CA`, `GB`) |
+| `country` | string | No | ISO 3166-1 alpha-2 country code (`US`, `CA`, `GB`) |
 | `successUrl` | string | No | HTTPS URL to redirect buyer after payment |
 | `cancelUrl` | string | No | HTTPS URL to redirect buyer on cancel |
 | `mode` | string | No | Payment mode (default `"payment"`) |
@@ -81,11 +80,10 @@ Amounts are always in **minor units** (the smallest currency unit):
 
 ```bash
 curl -X POST https://checkout.vonpay.com/v1/sessions \
-  -H "Authorization: Bearer vp_key_live_xxx" \
+  -H "Authorization: Bearer vp_sk_live_xxx" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: order_456_attempt_1" \
   -d '{
-    "merchantId": "default",
     "amount": 3298,
     "currency": "USD",
     "country": "US",
@@ -108,11 +106,10 @@ curl -X POST https://checkout.vonpay.com/v1/sessions \
 
 ```bash
 curl -X POST https://checkout.vonpay.com/v1/sessions \
-  -H "Authorization: Bearer vp_key_live_xxx" \
+  -H "Authorization: Bearer vp_sk_live_xxx" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: simple_pay_001" \
   -d '{
-    "merchantId": "default",
     "amount": 5000,
     "currency": "USD",
     "country": "US",

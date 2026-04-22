@@ -22,9 +22,13 @@ Card data never touches your servers or ours. We're PCI SAQ-A compliant.
 - [Quickstart](quickstart.md) — Full integration in 5 minutes
 - [How It Works](how-it-works.md) — Architecture and session lifecycle
 - [API Reference](reference/api.md) — OpenAPI spec
-- [Node SDK](sdks/node-sdk.md) — `@vonpay/node`
+- [Node SDK](sdks/node-sdk.md) — `@vonpay/checkout-node`
+- [Python SDK](sdks/python-sdk.md) — `vonpay-checkout`
+- [CLI](sdks/cli.md) — `@vonpay/checkout-cli`
 - [Drop-in Snippet](sdks/vonpay-js.md) — `vonpay.js`
+- [MCP Server](sdks/mcp.md) — AI agent integration
 - [REST API](sdks/rest-api.md) — cURL examples
+- [Webhooks](integration/webhooks.md) — Real-time payment events
 - [Test in Sandbox](guides/test-in-sandbox.md) — Try it before going live
 - [Go Live](guides/going-live.md) — Production checklist
 
@@ -33,8 +37,20 @@ Card data never touches your servers or ours. We're PCI SAQ-A compliant.
 | Tool | Best for | Complexity |
 |------|----------|------------|
 | [vonpay.js](sdks/vonpay-js.md) | No-backend merchants, quick prototypes | Lowest |
-| [@vonpay/node](sdks/node-sdk.md) | Node.js / TypeScript backends | Low |
+| [@vonpay/checkout-node](sdks/node-sdk.md) | Node.js / TypeScript backends | Low |
+| [vonpay-checkout (Python)](sdks/python-sdk.md) | Python backends | Low |
+| [@vonpay/checkout-cli](sdks/cli.md) | Terminal workflows, scripting, CI/CD | Low |
 | [REST API](sdks/rest-api.md) | Any language, full control | Low |
+
+## API Keys
+
+Your API keys are available in the [developer dashboard](https://vonpay.com/developers).
+
+| Key | Prefix | Use |
+|-----|--------|-----|
+| Test secret key | `vp_sk_test_` | Development and sandbox testing |
+| Live secret key | `vp_sk_live_` | Production payments |
+| Session secret | `ss_test_` / `ss_live_` | Verifying return URL signatures |
 
 ## AI / Agent Integration
 

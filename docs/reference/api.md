@@ -28,10 +28,19 @@ Endpoints marked "internal" are called by the hosted checkout page, not by merch
 Merchant-facing endpoints use Bearer token auth:
 
 ```
-Authorization: Bearer vp_key_live_xxx
+Authorization: Bearer vp_sk_live_xxx
 ```
 
-Test keys use the `vp_key_test_` prefix. Live keys use `vp_key_live_`.
+Test keys use the `vp_sk_test_` prefix. Live keys use `vp_sk_live_`.
+
+## Request Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | Bearer token (`vp_sk_live_xxx` or `vp_sk_test_xxx`) |
+| `Content-Type` | Yes | `application/json` for POST requests |
+| `Von-Pay-Version` | No | API version date string (e.g. `2026-04-14`). If omitted, your account's default API version is used. Pin this header to avoid breaking changes when the API evolves. |
+| `Idempotency-Key` | No | Unique key to prevent duplicate operations. If you retry a request with the same key, the original response is returned instead of creating a duplicate. Recommended for all `POST` requests in production. |
 
 ## Response Headers
 
@@ -41,3 +50,4 @@ Every response includes:
 |--------|-------------|
 | `X-Request-Id` | Unique request ID for debugging |
 | `X-RateLimit-Remaining` | Remaining requests in the current window |
+| `Von-Pay-Version` | The API version used for this request |
