@@ -30,7 +30,7 @@ pip install vonpay-checkout==0.1.0
 ### CLI
 
 ```bash
-npm install -g @vonpay/checkout-cli
+npm install -g @vonpay/checkout-cli@0.1.0
 vonpay checkout login
 ```
 
