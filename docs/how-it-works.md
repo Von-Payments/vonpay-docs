@@ -73,9 +73,7 @@ When the buyer arrives at the checkout URL, they see:
 
 ## Payment Routing
 
-Von Payments runs a gateway-orchestration layer called **Vora**. When you call `POST /v1/sessions`, Vora selects the underlying payment processor (Stripe, Adyen, NMI, etc.) based on the merchant's configuration, processor health, and routing rules. From your code, this is invisible — the API surface is unchanged.
-
-Session responses include a handful of `provider*` fields (and a `type` field) that expose which processor handled the session. Most integrations ignore them; they're useful for reporting, reconciliation, and support escalation.
+Von Payments runs a gateway-orchestration layer called **Vora**. When you call `POST /v1/sessions`, Vora selects the underlying payment processor based on the merchant's configuration, processor health, and routing rules — all server-side. The merchant API does not expose which processor handled the session; your integration is identical regardless of routing decisions.
 
 See [Vora — Payment Routing](concepts/vora.md) for the full concept.
 

@@ -286,20 +286,20 @@ Every response includes `X-Request-Id` header for debugging.
 | 410 | Session expired |
 | 429 | Rate limited |
 | 500 | Server error |
-| 503 | Auth service unavailable (`code: auth_service_unavailable`) — the replicated auth schema is mid-migration and the key-state classifier cannot safely enforce grace/expiry predicates. Retry with exponential backoff; clears automatically once replication catches up. |
+| 503 | Auth service unavailable (`code: auth_service_unavailable`) — retry with exponential backoff. |
 
 ## SDKs
 
-### Node.js (@vonpay/node)
+### Node.js (@vonpay/checkout-node)
 
 ```bash
-npm install @vonpay/node
+npm install @vonpay/checkout-node
 ```
 
 ```typescript
-import { VonPay } from "@vonpay/node";
+import { VonPayCheckout } from "@vonpay/checkout-node";
 
-const vonpay = new VonPay("vp_sk_live_xxx");
+const vonpay = new VonPayCheckout("vp_sk_live_xxx");
 
 // Create session
 const session = await vonpay.sessions.create({
@@ -310,18 +310,22 @@ const session = await vonpay.sessions.create({
 });
 // Redirect buyer to session.checkoutUrl
 
-// Check status
+// Check status (secret key only)
 const status = await vonpay.sessions.get("vp_cs_live_xxx");
 
-// Verify return signature
-const isValid = VonPay.verifyReturnSignature({
-  session: url.searchParams.get("session"),
-  status: url.searchParams.get("status"),
-  amount: url.searchParams.get("amount"),
-  currency: url.searchParams.get("currency"),
-  transaction_id: url.searchParams.get("transaction_id"),
-  sig: url.searchParams.get("sig"),
-}, process.env.VON_PAY_SESSION_SECRET);
+// Verify return signature (v2 format; auto-detects v1 legacy)
+const isValid = VonPayCheckout.verifyReturnSignature(
+  {
+    session: url.searchParams.get("session"),
+    status: url.searchParams.get("status"),
+    amount: url.searchParams.get("amount"),
+    currency: url.searchParams.get("currency"),
+    transaction_id: url.searchParams.get("transaction_id"),
+    sig: url.searchParams.get("sig"),
+  },
+  process.env.VON_PAY_SESSION_SECRET,
+  { expectedSuccessUrl: "https://mystore.com/confirm", expectedKeyMode: "live" },
+);
 ```
 
 ### Browser (vonpay.js)

@@ -292,7 +292,7 @@ function handleError(code: ErrorCode) {
 |-------|---------------|
 | `session.succeeded` | `transactionId`, `amount`, `currency` |
 | `session.failed` | `error`, `failureCode` |
-| `session.expired` | `sessionId`, `timestamp` |
+| `session.expired` | _no unique fields beyond the base_ — `sessionId`, `merchantId`, `amount`, `currency`, `status`, `timestamp`, `metadata` all present |
 | `refund.created` | `refundId`, `amount`, `currency` |
 
 ```typescript

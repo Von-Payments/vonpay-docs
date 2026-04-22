@@ -175,7 +175,9 @@ def verify_v2(sig, session, status, amount, currency, transaction_id,
     if str(payload.get("transactionId", "")) != (transaction_id or ""): return False
     if payload["successUrl"] != normalise_success_url(expected_success_url): return False
     if payload["keyMode"] != expected_key_mode: return False
-    if int(time.time()) - payload["iat"] > max_age: return False
+    now = int(time.time())
+    if now - payload["iat"] > max_age: return False
+    if payload["iat"] > now + 60: return False   # future-skew tolerance (matches SDK)
     return True
 ```
 

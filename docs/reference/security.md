@@ -8,6 +8,8 @@ sidebar_position: 4
 
 API requests use Bearer token authentication:
 
+### Key Types {#key-types}
+
 ```
 Authorization: Bearer vp_sk_live_xxx
 ```
@@ -16,6 +18,15 @@ Authorization: Bearer vp_sk_live_xxx
 - **Live keys** (`vp_sk_live_xxx`) — production, real payments
 
 Keep your API key secret. If compromised, contact Von Payments to rotate it.
+
+### Key Rotation {#key-rotation}
+
+Secret keys can be rotated without downtime. When a key is rotated, the previous key enters a **24-hour grace window** during which both keys authenticate. After the grace window closes, the previous key returns `401` with `code: auth_key_expired` — distinct from `auth_invalid_key` so SDKs can detect rotation and refresh instead of failing the payment.
+
+- **Plain deactivation** (`is_active=false` with no rotation metadata) returns `auth_invalid_key`
+- **Force-deactivation mid-rotation** (flipping `is_active=false` while grace/expiry metadata is set) returns `auth_key_expired` — the deactivation is treated as an accelerated rotation, not a plain revocation
+
+Rotate keys via `/dashboard/developers/api-keys`. The UI shows the new plaintext exactly once at creation — store it immediately.
 
 ## HMAC Return URL Signatures
 
@@ -115,17 +126,22 @@ X-VonPay-Timestamp: 2026-04-22T09:30:00.000Z
 
 To verify:
 
-1. Read the raw request body (before JSON parsing)
+1. Capture the raw request body **as bytes** before any JSON parsing
 2. Compute `HMAC-SHA256(key: your_api_key, data: raw_body)` and hex-encode
-3. Timing-safe compare with the `X-VonPay-Signature` value
-4. Reject if `X-VonPay-Timestamp` is more than 5 minutes from now (replay protection)
+3. Timing-safe compare with the `X-VonPay-Signature` value — wrap in try/catch; a length-mismatched hex input throws and must be treated as no-match
+4. Reject if `X-VonPay-Timestamp` is more than **±5 minutes** from now (symmetric window — matches the SDK's `constructEvent` replay check)
 
 ```typescript
 import crypto from "crypto";
 
-function verifyWebhookSignature(rawBody: string, signature: string, apiKey: string): boolean {
+function verifyWebhookSignature(rawBody: Buffer | string, signature: string, apiKey: string): boolean {
   const expected = crypto.createHmac("sha256", apiKey).update(rawBody).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex"));
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex"));
+  } catch {
+    // length mismatch or non-hex signature — reject
+    return false;
+  }
 }
 ```
 

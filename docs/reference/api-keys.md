@@ -18,7 +18,7 @@ This page is a stub so links from merchant-app UI and error responses resolve. F
 | **Live publishable key** | `vp_pk_live_` | Browser-exposed client code, production only | 24h grace |
 | **Session secret** | `ss_test_`, `ss_live_` | Server-side verification of return redirects | Rotated with the merchant signing key |
 
-The `ss_*` prefix is a merchant-side convention used when generating the value — the checkout runtime accepts any non-empty string as the session secret. Always pass the secret Von Payments gave you in the dashboard verbatim; never reformat it.
+The `ss_*` prefix is the format Von Payments uses when provisioning the secret. **Always use the session secret provided by Von Payments in the dashboard verbatim** — do not generate your own. The checkout runtime does not enforce a minimum key length, so a short or predictable secret enables signature forgery. Copy-paste from `/dashboard/developers/api-keys` and store in a secret manager.
 
 Webhook signing secrets (`whsec_*`, launching with Webhooks v2) are **separate** — see [Webhook Signing Secrets](../integration/webhook-secrets.md).
 

@@ -35,20 +35,16 @@ info:
 
     ## Rate Limits
 
-    Requests are rate-limited per merchant key. Current buckets:
+    Requests are rate-limited. `POST /v1/sessions` has both a per-IP bucket
+    (10 req / 60 s) and a per-API-key bucket (30 req / 60 s). `GET /v1/sessions/:id`
+    is limited to 30 req / 60 s per IP.
 
-    | Endpoint                  | Limit            |
-    |---------------------------|------------------|
-    | `POST /v1/sessions`       | 10 req / 60 s    |
-    | `GET /v1/sessions/:id`    | 30 req / 60 s    |
+    Rate-limit headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+    `X-RateLimit-Reset`, `Retry-After`) are emitted on **429 responses only** —
+    not on successful responses.
 
-    Rate limit state is returned in response headers:
-    - `X-RateLimit-Limit` — bucket capacity
-    - `X-RateLimit-Remaining` — remaining requests in the current window
-    - `X-RateLimit-Reset` — UTC epoch seconds when the window resets
-
-    When the limit is exceeded, the API returns `429 Too Many Requests` with error code
-    `rate_limit_exceeded`.
+    Per-IP overage returns `rate_limit_exceeded`; per-API-key overage returns
+    `rate_limit_exceeded_per_key`.
 
     ## Error Handling
 
@@ -180,14 +176,6 @@ paths:
               $ref: "#/components/headers/X-Request-Id"
             Von-Pay-Version:
               $ref: "#/components/headers/Von-Pay-Version"
-            Von-Pay-Latest-Version:
-              $ref: "#/components/headers/Von-Pay-Latest-Version"
-            X-RateLimit-Limit:
-              $ref: "#/components/headers/X-RateLimit-Limit"
-            X-RateLimit-Remaining:
-              $ref: "#/components/headers/X-RateLimit-Remaining"
-            X-RateLimit-Reset:
-              $ref: "#/components/headers/X-RateLimit-Reset"
           content:
             application/json:
               schema:
@@ -203,14 +191,6 @@ paths:
               $ref: "#/components/headers/X-Request-Id"
             Von-Pay-Version:
               $ref: "#/components/headers/Von-Pay-Version"
-            Von-Pay-Latest-Version:
-              $ref: "#/components/headers/Von-Pay-Latest-Version"
-            X-RateLimit-Limit:
-              $ref: "#/components/headers/X-RateLimit-Limit"
-            X-RateLimit-Remaining:
-              $ref: "#/components/headers/X-RateLimit-Remaining"
-            X-RateLimit-Reset:
-              $ref: "#/components/headers/X-RateLimit-Reset"
           content:
             application/json:
               schema:
@@ -269,14 +249,6 @@ paths:
               $ref: "#/components/headers/X-Request-Id"
             Von-Pay-Version:
               $ref: "#/components/headers/Von-Pay-Version"
-            Von-Pay-Latest-Version:
-              $ref: "#/components/headers/Von-Pay-Latest-Version"
-            X-RateLimit-Limit:
-              $ref: "#/components/headers/X-RateLimit-Limit"
-            X-RateLimit-Remaining:
-              $ref: "#/components/headers/X-RateLimit-Remaining"
-            X-RateLimit-Reset:
-              $ref: "#/components/headers/X-RateLimit-Reset"
           content:
             application/json:
               schema:

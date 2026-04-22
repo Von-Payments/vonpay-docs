@@ -12,6 +12,14 @@ The complete Von Payments Checkout API is documented in OpenAPI 3.1 format.
 
 ## Endpoints Summary
 
+### Get session status {#get-session-status}
+
+`GET /v1/sessions/{id}` returns the full status of a previously-created session. Requires a secret key (`vp_sk_*`); publishable keys are rejected with `auth_key_type_forbidden`. See [Session Object](session-object.md) for the response shape.
+
+### Session statuses {#session-statuses}
+
+Sessions progress through `pending → succeeded` or `pending → failed` or `pending → expired`. Transitions are one-way and terminal. See [Session Object — Status Lifecycle](session-object.md#status-lifecycle).
+
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `POST` | `/v1/sessions` | Bearer | Create a checkout session |
@@ -53,3 +61,7 @@ Every response includes:
 | `X-Request-Id` | Unique request ID for debugging |
 
 Rate-limit headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`) are emitted only on `429` responses. See [Rate Limits](rate-limits.md).
+
+## Rate Limits {#rate-limits}
+
+Full bucket list and handling rules: [Rate Limits](rate-limits.md).

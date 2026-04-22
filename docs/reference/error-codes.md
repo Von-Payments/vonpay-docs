@@ -116,7 +116,7 @@ Each error code emitted in a response body (`docs` field) links to its section b
 
 ### auth_merchant_inactive
 
-**HTTP:** 403. The merchant account has been disabled or suspended. Check `/dashboard` for status banners; contact support if unexpected.
+**HTTP:** 401. The merchant account has been disabled or suspended. Check `/dashboard` for status banners; contact support if unexpected.
 
 ### auth_service_unavailable
 
@@ -152,7 +152,7 @@ Each error code emitted in a response body (`docs` field) links to its section b
 
 ### merchant_not_configured
 
-**HTTP:** 422. The merchant has not completed onboarding for this operation — usually payment-provider credentials (Stripe Connect account not boarded, Gr4vy binding not provisioned, etc.). Complete boarding via the merchant dashboard, or contact support.
+**HTTP:** 422. The merchant has not completed onboarding for this operation — usually payment-provider credentials are not yet provisioned. Complete boarding via the merchant dashboard, or contact support.
 
 ### rate_limit_exceeded
 
@@ -164,7 +164,7 @@ Each error code emitted in a response body (`docs` field) links to its section b
 
 ### provider_unavailable
 
-**HTTP:** 502. Upstream payment provider (Stripe, Gr4vy, etc.) is not responding. Retriable — the SDK auto-retries with backoff.
+**HTTP:** 502. Upstream payment provider is not responding. Retriable — the SDK auto-retries with backoff.
 
 ### internal_error
 
