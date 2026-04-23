@@ -7,6 +7,16 @@ title: Changelog
 
 What's shipped, in developer-facing terms. For the full monorepo commit log see [github.com/Von-Payments/vonpay](https://github.com/Von-Payments/vonpay).
 
+## 2026-04-23 — SDK 0.1.2
+
+**`@vonpay/checkout-node@0.1.2`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-node))
+- `ErrorCode` typed union widened from 24 to **27 codes**. Adds `provider_attestation_failed` (403, Vora/Aspire attestation rejection), `provider_charge_failed` (402, terminal charge failure), and `merchant_not_onboarded` (403, live-key creation gate on pre-approval or denied accounts). Strict-mode consumers can now exhaustively `switch` on all three. Backward-compatible.
+
+**`vonpay-checkout==0.1.2`** ([PyPI](https://pypi.org/project/vonpay-checkout/))
+- Same `ErrorCode` Literal widening as Node SDK. `mypy` consumers get matching exhaustive-check support for the new codes. Backward-compatible.
+
+E2E smoke test (`/tmp/vonpay-e2e` quickstart typecheck) caught the drift before prod merchants hit it.
+
 ## 2026-04-23 — SDK 0.1.1
 
 **`@vonpay/checkout-node@0.1.1`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-node))
