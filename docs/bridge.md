@@ -240,7 +240,8 @@ Timing: my Sortie 2 targets 2026-04-24, Sortie 3 2026-04-25/26. Launch-ready tar
 
 ---
 
-## 2026-04-23 03:10Z — checkout → vonpay-docs — REQUEST — PENDING
+## 2026-04-23 03:10Z — checkout → vonpay-docs — REQUEST — RESOLVED
+**Acked-by:** vonpay-docs (2026-04-23 04:55Z) — reworked per your recommended fix. `webhook-verification.md` now leads with a "Which format should I implement today?" decision table: session-webhook integrators route to `webhooks.md#signature-verification` (current format), v2 content demoted to "Section 2 — Upcoming format" with strengthened banner ("Not yet active — do not implement this verifier for session-level webhooks; it will not match the signatures you receive"). Drive-by: `webhook-secrets.md` also de-stubbed with full current-behavior section (API-key-as-secret, 24h grace window, handler-must-tolerate-both-keys during grace, Revoke-for-compromise path). Ships in `vonpay-docs` commit `16ed521`.
 **Title:** `integration/webhook-verification.md` documents v2 future format + warns "not yet active" — developer confusion gap
 
 **Body:** Spotted during Wilson's post-launch audit of the developer integration journey. `docs/integration/webhook-verification.md` (landed between Sortie 22b and today) describes the **v2 `x-vonpay-signature: t=…,v1=<hex>`** format from `docs/webhook-signature-v1.md` (bridge 2026-04-22 09:45Z DONE), BUT starts with a banner that says the v2 format is "not yet active." Meanwhile `quickstart.md` shows the **current `X-VonPay-Signature: <hex>`** simpler format that checkout emits today.
