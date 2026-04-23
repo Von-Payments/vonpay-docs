@@ -10,29 +10,27 @@ Every Von Payments account has a sandbox environment with its own API keys, merc
 
 1. **Sign up at `app.vonpay.com`** with your email (OTP login — no ops-side approval queue for account creation).
 2. **Provision a sandbox** from `/dashboard/developers` → click **Create sandbox**. This atomically creates a sandbox merchant record, attaches a `mock` gateway config (so sessions route immediately without boarding a real processor), and issues your test keys (`vp_sk_test_*`, `vp_pk_test_*`, `ss_test_*`). Grab them at `/dashboard/developers/api-keys`.
-3. **Use a test card** from [Test Cards](../reference/test-cards.md) — `4242 4242 4242 4242` for the happy path, any future expiry, any CVC. Or trigger mock-gateway outcomes by amount: `200¢` for decline, `300¢` for 3DS, `500¢` for timeout, any other amount for approve (see below).
+3. **Trigger the outcome you need** by setting the session `amount`: `200` in minor units for a declined charge, any other amount for approved. See the table below.
 
 No approval queue for sandbox — you can be creating test sessions within a minute of sign-up. Live keys are separate and require merchant application approval; see [API Keys → Self-service vs. gated issuance](../reference/api-keys.md#self-service-vs-gated-issuance).
 
 ## Test-mode behavior
 
 - **Test transactions never touch a real processor.** The `mock` gateway produces synthetic, Stripe-shaped session payloads with deterministic outcomes (see table below).
-- **Webhooks still fire.** Point them at [webhook.site](https://webhook.site) (easiest — no local setup) or [ngrok](https://ngrok.com) for a tunnel into your dev machine.
+- **Webhooks still fire.** Point them at [webhook.site](https://webhook.site) (easiest — no local setup) or [ngrok](https://ngrok.com) for a tunnel into your dev machine. On production, webhook delivery for sandbox sessions requires the Vora delivery flag — currently enabled on `checkout-staging.vonpay.com`.
 - **Rate limits apply** but are more generous than in production.
 - **Data is ephemeral.** Test sessions are purged nightly around 03:00 UTC. Don't rely on a test session ID surviving past the next day.
 
-## Mock gateway — deterministic outcomes
+## Sandbox outcomes — deterministic by amount
 
-When a sandbox merchant routes through the `mock` gateway, the test outcome is chosen by the session `amount` (in minor units — cents, pence, etc.). This lets you exercise every branch of your integration without juggling test cards.
+Session `amount` (in minor units — cents, pence, etc.) picks the outcome.
 
-| Amount | Outcome | Use for |
+| Amount | Outcome | What your integration should handle |
 |---|---|---|
-| `200` | **Declined** — `session.failed` with `failure_code: card_declined` | Rendering the decline path in your UI |
-| `300` | **3DS challenge required** — session enters `pending_3ds` before resolving | Testing the redirect-through-3DS flow |
-| `500` | **Timeout** — no webhook fires; session expires via `session.expired` | Testing timeout handling + webhook-replay idempotency |
-| **Any other amount** | **Approved** — `session.succeeded` with a synthetic `transactionId` | The happy path |
+| `200` | **Declined** — `charge.failed` webhook with `failure_reason: card_declined`; session status → `failed`; signed redirect URL carries `status=failed` | Rendering the decline path in your UI; reading `failure_reason` from the webhook payload |
+| Any other | **Approved** — `charge.succeeded` webhook; session status → `succeeded`; signed redirect URL carries `status=succeeded` | The happy path |
 
-These outcomes apply to the `mock` gateway only. Sandbox merchants boarded with a real provider (Gr4vy sandbox, Stripe test mode, Aspire sandbox) respect that provider's own test cards / sandbox rules — see [Test Cards](../reference/test-cards.md).
+Need to exercise 3DS, issuer-specific declines, timeouts, or other edge cases? Board a real Stripe Connect test-mode account or Gr4vy sandbox onto your merchant — both provide their full test-card catalogs without touching real funds. The checkout-local sandbox deliberately keeps one decline trigger; richer decline simulation belongs with the real processor's sandbox.
 
 ## Common developer setups
 
