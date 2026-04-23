@@ -4,9 +4,7 @@ sidebar_position: 7
 
 # Webhook Signing Secrets
 
-:::info Coming with the Webhooks v2 launch
-Full content for subscription-level signing-secret lifecycle (create, view-once, rotate, compromise runbook) lands next Sortie alongside the merchant-app Webhooks UI that creates and rotates subscriptions. This page is a stub so error-code `docs:` URLs resolve.
-:::
+Von Payments uses **two separate categories** of webhook-signing secret — one that's active today, and one that arrives with Webhooks v2. This page covers both so you can plan your handler logic for either.
 
 ## Two secrets — not the same thing
 
@@ -17,11 +15,27 @@ Von Payments uses two categories of secret. Don't confuse them.
 | **Merchant API key** | `vp_sk_test_*`, `vp_sk_live_*` | Authorize API calls. Also the HMAC secret for **session-level** webhooks (current). | 24-hour grace period on rotation |
 | **Webhook signing secret** | `whsec_*` (Webhooks v2) | HMAC secret for a single merchant-registered webhook **subscription**. | No grace — rotate = new secret immediately, compromise = revoke + create-new + delete-old |
 
-## Session-level webhook secret (current)
+## Session-level webhook secret (current — use this today)
 
-For `session.succeeded`, `session.failed`, `session.expired`, and `refund.created` events delivered to the webhook URL on your merchant record, the signing secret **is your merchant API key**. If you rotate the API key, the webhook secret rotates with it.
+For session-level events (`session.succeeded`, `session.failed`, `session.expired`, `refund.created`) delivered to the webhook URL on your merchant record, the signing secret **is your merchant API key** (`vp_sk_test_*` in test mode, `vp_sk_live_*` in live mode). There is no separate webhook secret to provision or rotate.
 
-See [Webhooks](webhooks.md) and [API Keys](../reference/api-keys.md) for details.
+### Key rotation behavior
+
+When you rotate the merchant API key, the webhook secret rotates with it **automatically** — there's only one secret, so there's only one rotation:
+
+| t = | State |
+|---|---|
+| t0 | Click *Rotate* on the merchant API key. New key is created; old key enters 24-hour grace. |
+| t0 → t0+24h | **Both keys accepted** as webhook signing secrets. Webhooks signed during this window may use either — your handler must tolerate both. During the window, Von Payments may sign outbound webhooks with either key (reflecting the merchant's current active key at event emission time). |
+| t0+24h | Old key no longer accepts. All new webhooks signed with the new key. |
+
+**Handler implication during rotation:** keep both the old and new API keys loaded in your verifier for 24 hours after rotation. After 24h, remove the old key from your handler env to tighten the verification surface.
+
+See [Webhooks](webhooks.md), [Webhook Verification](webhook-verification.md#section-2--upcoming-format-webhooks-v2), and [API Keys → Rotation grace](../reference/api-keys.md#rotation-grace) for the full picture.
+
+### Compromise path
+
+If a merchant API key is exposed, do **not** rely on the normal rotation grace — that keeps the compromised key working for another 24 hours. Use *Revoke* from `/dashboard/developers/api-keys` instead: it sets the grace end to NOW, so the next webhook signed with the compromised key will reject. Create a fresh key, update your handler env, and redeploy. See [API Keys → Compromise](../reference/api-keys.md#compromise--skip-the-grace) for the full runbook.
 
 ## Subscription-level webhook secret (Webhooks v2)
 

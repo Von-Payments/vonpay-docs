@@ -8,9 +8,11 @@ Every Von Payments account has a sandbox environment with its own API keys, merc
 
 ## Start a sandbox integration in 3 steps
 
-1. **Provision a sandbox** from `/dashboard/developers` → "Create sandbox." The merchant record is seeded with a mock gateway so you can create routable sessions immediately, without boarding a real processor.
-2. **Grab your test keys** at `/dashboard/developers/api-keys` (`vp_sk_test_*` and `ss_test_*`).
-3. **Use a test card** from [Test Cards](../reference/test-cards.md) — `4242 4242 4242 4242` for the happy path, any future expiry, any CVC.
+1. **Sign up at `app.vonpay.com`** with your email (OTP login — no ops-side approval queue for account creation).
+2. **Provision a sandbox** from `/dashboard/developers` → click **Create sandbox**. This atomically creates a sandbox merchant record, attaches a `mock` gateway config (so sessions route immediately without boarding a real processor), and issues your test keys (`vp_sk_test_*`, `vp_pk_test_*`, `ss_test_*`). Grab them at `/dashboard/developers/api-keys`.
+3. **Use a test card** from [Test Cards](../reference/test-cards.md) — `4242 4242 4242 4242` for the happy path, any future expiry, any CVC. Or trigger mock-gateway outcomes by amount: `200¢` for decline, `300¢` for 3DS, `500¢` for timeout, any other amount for approve (see below).
+
+No approval queue for sandbox — you can be creating test sessions within a minute of sign-up. Live keys are separate and require merchant application approval; see [API Keys → Self-service vs. gated issuance](../reference/api-keys.md#self-service-vs-gated-issuance).
 
 ## Test-mode behavior
 

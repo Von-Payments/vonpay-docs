@@ -6,13 +6,28 @@ sidebar_position: 6
 
 Every webhook Von Payments delivers is signed with HMAC-SHA256. **Never process a webhook without verifying the signature first** — the verification guard is what stops an attacker from posting fake events to your endpoint.
 
-The canonical spec is [`webhook-signature-v1`](https://github.com/Von-Payments/vonpay-checkout/blob/main/docs/webhook-signature-v1.md) in the checkout repo. This page is the developer-facing walkthrough; if the two ever disagree, the spec wins.
+Von Payments is in the middle of a webhook-product migration. Two signature formats exist; **only one is active today**.
 
-:::warning The v1 spec on this page is for Webhooks v2, not yet active
-Today's session-level webhooks (`session.succeeded`, `session.failed`, `session.expired`, `refund.created`) use a **different, simpler** format: a plain `X-VonPay-Signature: <hex-hmac>` header with your merchant API key as the secret. See [Webhooks](webhooks.md) for that format.
+## Which format should I implement today?
 
-The `x-vonpay-signature: t=<ts>,v1=<hmac>` format documented below is the **future** Webhooks v2 spec for merchant-subscribed webhooks (15-event v1 catalog). The delivery engine that emits these signatures is scheduled to land in the checkout Sortie following this one — **you cannot integrate against v2 today**. Follow this page once merchant-subscribed webhooks ship.
+| If you're integrating... | Use this format | Doc |
+|---|---|---|
+| **Session-level webhooks** (`session.succeeded`, `session.failed`, `session.expired`, `refund.created`) — the current and only active path | **Current format (v1)** — `X-VonPay-Signature: <hex-hmac>` header, secret is your merchant API key | [Webhooks → Signature Verification](./webhooks#signature-verification) |
+| **Merchant-subscribed webhooks** (the 15-event Webhooks v2 catalog — `charge.*`, `payment_intent.*`, `dispute.*`, `payout.*`, `application.*`) — **not yet emitted by any endpoint** | **Upcoming format (v2)** — `x-vonpay-signature: t=<ts>,v1=<hmac>` header, per-subscription `whsec_*` secret | This page, Section 2 below |
+
+If you follow the [Quickstart](../quickstart.md) or consume Von Payments today, you want the **current format**. Click through to [Webhooks → Signature Verification](./webhooks#signature-verification) and ignore the rest of this page until Webhooks v2 ships.
+
+If you're preparing ahead of Webhooks v2 launch, continue reading below.
+
+---
+
+## Section 2 — Upcoming format (Webhooks v2)
+
+:::warning Not yet active
+The `x-vonpay-signature: t=<ts>,v1=<hmac>` format documented below is the **upcoming Webhooks v2** spec for merchant-subscribed webhook endpoints (15-event v1 catalog). The delivery engine that emits these signatures is scheduled in an upcoming checkout Sortie — **no endpoint emits this format today**. Do not implement this verifier for session-level webhooks; it will not match the signatures you receive.
 :::
+
+The canonical spec is [`webhook-signature-v1`](https://github.com/Von-Payments/vonpay-checkout/blob/main/docs/webhook-signature-v1.md) in the checkout repo. This page is the developer-facing walkthrough; if the two ever disagree, the spec wins.
 
 Both models use HMAC-SHA256. They differ in the header format, the signed-payload construction, and the secret.
 

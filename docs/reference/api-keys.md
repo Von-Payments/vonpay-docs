@@ -4,6 +4,13 @@ sidebar_position: 8
 
 # API Key Types
 
+## Self-service vs. gated issuance
+
+Key issuance depends on mode:
+
+- **Test keys (`vp_sk_test_*`, `vp_pk_test_*`, `ss_test_*`) — fully self-service.** Sign up at `app.vonpay.com` with your email, click **Create sandbox** at `/dashboard/developers`, and your test keys are issued in seconds — no ops-side approval queue. A sandbox merchant record is seeded automatically with a `mock` gateway so you can create and route test sessions immediately.
+- **Live keys (`vp_sk_live_*`, `vp_pk_live_*`, `ss_live_*`) — gated behind merchant application approval.** You must complete onboarding and have your merchant application approved (KYC + contract) before live-mode keys can be generated. Contact Von Payments to start the merchant onboarding process. Requesting live keys on an un-approved account returns `403 merchant_not_onboarded` with a pointer back to the onboarding flow.
+
 ## Key types at a glance
 
 | Key | Prefix | Where to use it | Rotation |
