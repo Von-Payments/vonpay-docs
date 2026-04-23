@@ -18,19 +18,19 @@ Get a working checkout integration in 5 minutes.
 ### Node.js
 
 ```bash
-npm install @vonpay/checkout-node@0.1.2
+npm install @vonpay/checkout-node@0.1.3
 ```
 
 ### Python
 
 ```bash
-pip install vonpay-checkout==0.1.2
+pip install vonpay-checkout==0.1.3
 ```
 
 ### CLI
 
 ```bash
-npm install -g @vonpay/checkout-cli@0.1.0
+npm install -g @vonpay/checkout-cli@0.1.3
 vonpay checkout login
 ```
 

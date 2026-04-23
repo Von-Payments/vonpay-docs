@@ -7,6 +7,42 @@ title: Changelog
 
 What's shipped, in developer-facing terms. For the full monorepo commit log see [github.com/Von-Payments/vonpay](https://github.com/Von-Payments/vonpay).
 
+## 2026-04-23 — SDK 0.1.3 (security + quality patch)
+
+All 4 monorepo packages bumped to `0.1.3` in one coordinated cycle. Driven by a post-launch Automata review that surfaced 7 HIGH + 8 MEDIUM findings. Post-fix re-review (code-reviewer + devsec + qa) was green. No runtime crash or data loss in 0.1.2; 0.1.3 tightens the hardening envelope around it.
+
+**`@vonpay/checkout-node@0.1.3`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-node))
+- **New:** `webhooks.constructEventV2(payload, signatureHeader, secret)` — opt-in Stripe-strict variant that binds the timestamp into the HMAC payload. Expects header format `t=<unix-seconds>,v2=<hex-sha256>` where `v2 = HMAC(secret, "${t}.${body}")`. Prevents replay of a body with a new timestamp. Backward-compatible: existing `constructEvent` unchanged, and the server only emits v2 when opted in per-merchant.
+- `verifySignature` hex regex no longer accepts mixed-case (lowercase-only, matching the wire format). Applies to webhook + v1/v2 return-signature paths.
+- `ErrorCode` union: `merchant_not_onboarded` reordered to sit with `merchant_not_configured`, restoring the semantic grouping of the `auth_*` block.
+- 45 unit tests (up from 34): Buffer-payload round-trips, the v2 suite, mixed-case reject, ErrorCode catalog coverage.
+
+**`vonpay-checkout==0.1.3`** ([PyPI](https://pypi.org/project/vonpay-checkout/))
+- Matching `webhooks.construct_event_v2(payload, signature_header, secret)` with the same Stripe-strict semantics. Parity with Node side, bytes-or-str payload accepted.
+- HMAC verification now compares raw bytes (`bytes.fromhex()` against `.digest()`) instead of `.lower()`-folded hex strings — matches Node's `timingSafeEqual` posture.
+- `ErrorCode` Literal reordered for `auth_*` grouping symmetry.
+- pytest src-layout fixed — tests now actually run (was 0 → **28 pass**). New review rule `sdk/python-pytest-src-layout` codified in the monorepo so it stays fixed.
+
+**`@vonpay/checkout-cli@0.1.3`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-cli))
+- `vonpay checkout login <key>` — the warning about shell history exposure now fires BEFORE writing to disk, and passing a **live key** as a CLI argument unconditionally requires `--confirm-cli-exposure`. TTY-detection exemptions removed (pseudo-TTYs in CI are not a reliable signal). Interactive mode (`vonpay checkout login`) is unchanged.
+- `vonpay checkout trigger refund.created` — `status` is now `"created"` and `refundId` is populated (previously dropped from JSON serialization due to `undefined`).
+- `vonpay checkout init` — `.gitignore` coverage detection now implements full git ordering semantics: `!.env` negations correctly un-ignore, so the safety net fires instead of being silently skipped. New patterns matched: `**/.env`, `*.env`, `**/.env*`, `.env*`. 15 new unit tests.
+
+**`@vonpay/checkout-mcp@0.1.3`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-mcp))
+- `create_session` / `get_session` tools reject `javascript:`, `data:`, and `file:` schemes on `successUrl` / `cancelUrl` via an explicit `.refine()`. Zod's `.url()` alone does NOT block dangerous schemes — inline comment in source warns future maintainers.
+- `create_session` response projected to `{id, checkoutUrl, expiresAt}` — same safety posture as `get_session` (no metadata leaks into the LLM context).
+- Runtime `readFileSync(package.json)` replaced with a `version.ts` constant so the bundled CLI does not depend on package layout at runtime.
+- First test file: 6 tests covering tool registration, URL scheme restriction, session-ID regex, simulate_payment marker, and response projection.
+
+### Samples (in the monorepo, not a published package)
+
+- **Flask sample** — XSS fix: `markupsafe.escape()` wraps reflected query params (`status`, `session`) in the `/success` handler. Generic `{"error": "invalid_signature"}` on 401 instead of echoing the internal code. `request.host_url` replaced with `BASE_URL` env var so v2 signed-URL binding works behind proxies.
+- **Next.js sample** — `next.config.ts` now ships with CSP, HSTS, X-Frame-Options (`DENY`), X-Content-Type-Options, Referrer-Policy, and Permissions-Policy headers. Merchants copying the scaffold get secure defaults.
+
+### Docs
+
+- Install pins bumped `0.1.2` → `0.1.3` across `quickstart.md`, `sdks/node-sdk.md`, `sdks/python-sdk.md`, `sdks/cli.md`, `sdks/mcp.md`, `sdks/index.md`. CLI + MCP also bumped (were `0.1.0`).
+
 ## 2026-04-23 — SDK 0.1.2
 
 **`@vonpay/checkout-node@0.1.2`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-node))

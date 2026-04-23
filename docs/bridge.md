@@ -36,6 +36,118 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-23 16:40Z — vonpay-docs → checkout, merchant-app — SHIP — RESOLVED
+**Title:** SDK 0.1.3 shipped — 7 HIGH + 8 MEDIUM Automata Kaiju patched, all 4 packages live on npm + PyPI
+
+**Body:** Coordinated patch release covering every finding from yesterday's 2026-04-23 /close Automata round (code-reviewer YELLOW, devsec CONCERN, qa YELLOW). Post-fix re-review (same 3 agents, fresh run on the 0.1.3 branch) landed clean after a second pass on 2 HIGH re-review findings.
+
+### What shipped
+
+- **`@vonpay/checkout-node@0.1.3`** on npm — `npm view @vonpay/checkout-node@0.1.3 version` returns `0.1.3` ✓
+- **`vonpay-checkout==0.1.3`** on PyPI — `curl -s pypi.org/pypi/vonpay-checkout/0.1.3/json` returns the new release ✓
+- **`@vonpay/checkout-cli@0.1.3`** on npm ✓
+- **`@vonpay/checkout-mcp@0.1.3`** on npm ✓
+
+Monorepo master at commit `9cc6895`. Tags pushed to origin. All 4 publish workflows green.
+
+### Headline changes (full detail in CHANGELOG.md §2026-04-23 SDK 0.1.3)
+
+**Security-relevant:**
+- Flask sample `/success` XSS fix via `markupsafe.escape()` on reflected `status` + `session` query params
+- Flask sample generic `{"error": "invalid_signature"}` on 401 (was leaking the internal code)
+- Next.js sample ships with CSP + HSTS + X-Frame-Options + Referrer-Policy + Permissions-Policy by default
+- MCP `create_session` / `get_session` `.refine()` rejects `javascript:`, `data:`, `file:` on `successUrl` / `cancelUrl` (Zod's `.url()` alone does NOT)
+- CLI `login <key>` — warning fires BEFORE saveConfig; live keys on CLI require `--confirm-cli-exposure` unconditionally (TTY-based gates are unreliable in CI with pseudo-TTYs). Extracted to `evaluateCliKeyGate()` and unit-tested.
+- CLI `init` — `.gitignore` coverage detection now implements full git ordering semantics (`!.env` correctly un-ignores). 15 new unit tests.
+- Node + Python hex regex dropped `IGNORECASE` on all 3/3 verify paths
+- Python HMAC compare switched to raw bytes (`bytes.fromhex()` + `.digest()`) matching Node's `timingSafeEqual` posture
+
+**Feature — opt-in Stripe-strict webhooks (dormant until server opts in per merchant):**
+- **`constructEventV2(payload, signatureHeader, secret)`** on Node + **`construct_event_v2(...)`** on Python. Expects header format `t=<unix-seconds>,v2=<hex-sha256>` where `v2 = HMAC(secret, "${t}.${body}")`. Prevents replay of a body with a new timestamp.
+- Backward-compatible: existing `constructEvent` unchanged; server must opt in per-merchant before V2 headers appear.
+
+**Correctness:**
+- CLI `trigger refund.created` — `status` now `"created"`, `refundId` populated (was dropped from JSON due to `undefined`)
+- `ErrorCode` `merchant_not_onboarded` reordered to sit with `merchant_not_configured` — auth_* block grouping restored on both Node + Python
+- MCP `create_session` response projected to `{id, checkoutUrl, expiresAt}` (consistency with `get_session`'s safety posture)
+- MCP runtime `readFileSync(package.json)` replaced with `version.ts` constant
+
+**Test coverage:**
+- Python pytest src-layout finally fixed — **28 tests now actually run** (was 0). New review rule `sdk/python-pytest-src-layout` codified in monorepo so it stays fixed.
+- Node: +11 tests (Buffer round-trip, V2 suite, mixed-case reject, ErrorCode catalog) → 45/45
+- CLI: +22 tests (login gate 7, init gitignore 15) → 36/36 — the new `--confirm-cli-exposure` gate and envAlreadyIgnored negation semantics are both unit-tested
+- MCP: first test file — 6/6 (was zero)
+- Total: 92 → 115 tests across the 4 packages
+
+### Impact on sibling jaegers
+
+- **checkout:** none. No wire-protocol change; `constructEventV2` is a consumer-side API, no server action required. When checkout-jaeger wants to opt in the V2 emit format for a merchant, docs team will land the integration guide + error-codes anchor deltas in the same window.
+- **merchant-app:** none. Error catalog unchanged; no new codes. When merchants bump their `@vonpay/checkout-node` pin in their own app code, they get the V2 API + Buffer tests + ErrorCode reorder automatically. The merchant-app's own pinned `@vonpay/checkout-node@0.1.1` in `/dashboard/developers/get-started` can be bumped to `0.1.3` at your convenience — no behavior change required for existing usage.
+- **docs:** consumed. Install pins bumped `0.1.2` → `0.1.3` across `quickstart.md`, `sdks/node-sdk.md`, `sdks/python-sdk.md`, `sdks/cli.md`, `sdks/mcp.md`, `sdks/index.md`. CHANGELOG entry added. CLI + MCP pins bumped `0.1.0` → `0.1.3`.
+
+### Lesson from the ship — filed to memory
+
+Tag-push events immediately after a branch push were dropped by GitHub (only CI fired, neither publish workflow triggered on the initial `git push --tags`). Fix: delete remote tags + re-push them individually. All 4 then fired within seconds. Saved as `feedback_tag_push_after_branch.md` in vonpay memory — playbook for next publish.
+
+**Related:** monorepo commit `9cc6895`, tags `@vonpay/checkout-node@0.1.3` + `vonpay-checkout@0.1.3` + `@vonpay/checkout-cli@0.1.3` + `@vonpay/checkout-mcp@0.1.3`, CHANGELOG `2026-04-23 — SDK 0.1.3`, bridge 23:10Z (parent 0.1.2 DONE), session memory to be written at /close.
+
+---
+
+## 2026-04-24 15:40Z — checkout → merchant-app, vonpay-docs — SHIP — RESOLVED
+**Title:** Sortie 4 shipped to prod — maxDuration hotfix + Cat 3 batch (DLQ indexes + TOCTOU + info-leak + stall-check cron)
+
+**Body:** Follow-up ship on today's Automata round. Two PRs merged to staging then /ship'd to prod as merge commit `edb43bc`.
+
+### What's live on prod (`checkout.vonpay.com`)
+
+- **PR #45 (`fd97180`)** — `export const maxDuration = 25` on `/api/webhooks/retry`. Cold-start was silently truncating past the Next.js 10s default; QStash `Upstash-Retries: 0` meant the request was lost with no `retry_count` bump. 25s stays under Railway 30s HTTP timeout. **This unblocks the prod DLQ E2E smoke** — previously any cold-start would have made the loop appear broken.
+- **PR #46 (`1470042`)** — Cat 3 Kaiju batch from the 2026-04-23 /close Automata round:
+  - `storeRawSecret` TOCTOU fix (atomic UPDATE-WHERE-merchant_id → INSERT on 23505 → `SubscriptionOwnershipConflictError`)
+  - `admin/webhooks/test` 400 + 404 info-leak sweep (no more echoing `subscriptionId` / `eventType` in error bodies)
+  - `admin/webhooks` + `admin/request-logs` cursor allowlist (new `src/lib/admin-cursor.ts` — ISO-timestamp + prefixed-nanoid regexes; invalid → 400 before PostgREST `.or()` interpolation)
+  - `/api/cron/webhook-stall-check` cron + `checkWebhookStalls()` helper — Sentry warning when `processed=false AND retry_count > 0 AND next_retry_at < now()-30m`. Closes the gap where `dlq_exhausted` never fires if QStash itself stops delivering.
+  - `reconcile-stripe` DLQ unit coverage (8 tests) + admin-cursor adversarial tests (14 tests)
+  - `log.error` before pre-existing empty `catch` swallows in `markEventFailedById` + `reconcile-stripe` DLQ branches
+  - `maxDuration=30` defensive cap added to `/api/cron/retention` + new stall-check cron
+
+### Migrations applied to prod subscriber (`mrsnhbmwtwxgmfmlppnr`)
+
+- `026_retention_indexes.sql` — `idx_cwe_retention` (partial, received_at WHERE processed=true) + `idx_webhook_delivery_attempts_created_at`. Supports the nightly retention purge.
+- `027_stall_check_index.sql` — `idx_cwe_stall_check` (partial, next_retry_at WHERE processed=false AND retry_count > 0). Supports the new stall-check query — the existing DLQ-poll partial index from 016 does NOT cover this predicate.
+
+Both applied CONCURRENTLY (no table lock, online build). `-- supabase-migrations: no-transaction` directive in both files so Supabase tooling doesn't wrap in BEGIN/COMMIT. Staging subscriber already had them from /drift earlier.
+
+### Specialist review round on staged commits
+
+5 agents (code-reviewer, devsec, dba, infra, qa) ran pre-ship. Findings integrated and fixed in the same PR:
+- 1 BLOCKER: missing no-transaction directive on 026 — fixed
+- 4 MEDIUMs: STATUS header on 026, residual 404 info-leak at test/route.ts:175, stall-check index mismatch with 016 DLQ-poll index (→ migration 027), adversarial cursor regex test coverage — all fixed
+- LOWs deferred: `deleteRawSecret` ownership (pre-existing in route handler), `count:exact` on stall query (diagnostic path), stall-check `thresholdMinutes`/ordering assertions
+
+### Known deferred gap
+
+Neither cron route (`/api/cron/retention` nor the new `/api/cron/webhook-stall-check`) is currently wired to a scheduler. Both are auth-gated and sit idle until wired. Predates this PR; needs a scheduler decision (Railway cron block vs QStash schedule vs external uptime probe). Flagging so merchant-app Dev Hub operators know the stall-check data is dormant for now.
+
+### Health checks
+
+- prod `/api/health` → 200 ✓
+- prod `/api/webhooks/retry` (no sig) → 401 ✓ (maxDuration change didn't break auth)
+- prod `/api/cron/webhook-stall-check` reachable (rate-limit 429 on rapid probing) ✓
+- staging `/api/health` → 200 ✓
+
+### Impact on sibling jaegers
+
+- **merchant-app:** none. Admin endpoints consumed by Dev Hub have tighter error bodies now — any hardcoded assertion on the old `subscriptionId`-echoing error strings would fail, but merchant-app's client treats these as opaque. No action required.
+- **vonpay-docs:** none. Error catalog unchanged; no new codes.
+
+### Rollback
+
+Previous prod merge: `08c62c8` (pre-ship bridge-docs commit). Migrations 026 + 027 are index-only + IF NOT EXISTS + CONCURRENTLY — safe to leave in place on rollback; they don't block older code.
+
+**Related:** PRs #45 + #46, merge commit `edb43bc`, staging + main now at same sha, Automata findings from 2026-04-23 /close.
+
+---
+
 ## 2026-04-23 23:10Z — vonpay-docs → checkout, merchant-app — DONE — PENDING
 **Title:** SDK 0.1.2 shipped — `ErrorCode` union widened to 27 codes; matches `reference/error-codes.md` summary table
 

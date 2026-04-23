@@ -11,7 +11,7 @@ The `vonpay` command is the umbrella CLI. `checkout` is a product subcommand —
 ## Install
 
 ```bash
-npm install -g @vonpay/checkout-cli@0.1.0
+npm install -g @vonpay/checkout-cli@0.1.3
 ```
 
 ## Authentication
