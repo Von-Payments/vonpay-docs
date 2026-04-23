@@ -6,6 +6,10 @@ sidebar_position: 6
 
 Use these card numbers in test mode to simulate different payment outcomes. Any future expiry date and any 3-digit CVC will work.
 
+These cards work with sandbox merchants boarded on the standard processor sandboxes (Stripe test mode, Gr4vy sandbox, Aspire sandbox — whichever your sandbox merchant routes through).
+
+If your sandbox merchant is on the `mock` gateway instead, outcomes are chosen by session **amount**, not card number — see [Sandbox & Test Mode → Mock gateway](../guides/sandbox.md#mock-gateway--deterministic-outcomes).
+
 ## Card Numbers
 
 | Card | Brand | Outcome | Use for |
@@ -16,14 +20,6 @@ Use these card numbers in test mode to simulate different payment outcomes. Any 
 | `4000 0000 0000 9995` | Visa | Insufficient funds | Specific decline |
 | `5555 5555 5555 4444` | Mastercard | Success | Mastercard testing |
 | `3782 822463 10005` | Amex | Success | Amex testing |
-
-## Access via CLI
-
-List all test cards from your terminal:
-
-```bash
-vonpay checkout list-test-cards
-```
 
 ## Access via MCP
 
