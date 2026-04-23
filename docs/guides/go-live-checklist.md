@@ -22,6 +22,7 @@ Work through this list before flipping from test to live keys. Skip no row. If a
 
 ### Webhooks
 - [ ] Webhook endpoint is HTTPS
+  - The merchant dashboard blocks HTTP endpoint registration on save, but pre-onboarding developers can register HTTP-scheme endpoints through the API during sandbox provisioning for local-dev convenience. Before flipping to live keys, confirm every registered endpoint on `/dashboard/developers/webhooks` shows an `https://` prefix — TLS is required for all live-traffic webhooks because signing secrets are transmitted in the `X-VonPay-Signature` header on every delivery.
 - [ ] Signature verification uses a **constant-time compare**
 - [ ] 5-minute timestamp replay window is enforced
 - [ ] Handler is **idempotent** — you can receive the same event twice and nothing breaks

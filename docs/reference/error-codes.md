@@ -36,6 +36,7 @@ All errors return JSON with `error`, `code`, `fix`, and `docs` fields, plus an `
 | `auth_key_expired` | 401 | Key has rotated past its grace window or been force-deactivated mid-rotation |
 | `auth_key_type_forbidden` | 403 | Publishable key used on a secret-only endpoint, or sandbox/live mode mismatch |
 | `auth_merchant_inactive` | 401 | Merchant account is disabled or suspended |
+| `merchant_not_onboarded` | 403 | Merchant application is `pending_approval` or `denied` — live-key creation blocked until merchant-onboarding review completes |
 | `auth_service_unavailable` | 503 | Authentication service is temporarily unavailable |
 | `session_not_found` | 404 | Session ID does not exist |
 | `session_expired` | 410 | Session has expired (30-minute TTL) |
@@ -58,7 +59,7 @@ All errors return JSON with `error`, `code`, `fix`, and `docs` fields, plus an `
 | `transaction_verification_failed` | 403 | Transaction could not be verified with the payment provider |
 | `unsupported_media_type` | 415 | Content-Type header is missing or not `application/json` |
 
-26 codes total.
+27 codes total.
 
 Rate-limit buckets are documented on the [Rate Limits](rate-limits.md) page.
 
@@ -115,6 +116,12 @@ Each error code emitted in a response body (`docs` field) links to its section b
 ### auth_key_type_forbidden
 
 **HTTP:** 403. Primary cause: a publishable key (`vp_pk_*`) used against a secret-only endpoint like `GET /v1/sessions/:id`. Also fires on sandbox/live-mode mismatches. The `fix` field on the response tells you exactly what to switch to.
+
+### merchant_not_onboarded
+
+<a id="live-key-gate"></a>
+
+**HTTP:** 403. You tried to create a live-mode API key (`POST /api/merchants/api-keys` with `mode=live`), but your merchant application is still awaiting ops review (`pending_approval`) or has been `denied`. Test-mode keys (`vp_sk_test_*`) remain self-serve at any time via `/dashboard/developers` → *Create sandbox*; live-mode key issuance is gated on merchant-application review. If approval is pending, check `/dashboard/settings` for your application status and any outstanding requirements; if denied, contact Von Payments support with the details provided in your denial notice. Distinct from `auth_merchant_inactive` (401) which fires on a previously-approved account that has since been deactivated.
 
 ### auth_merchant_inactive
 

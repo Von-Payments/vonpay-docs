@@ -36,6 +36,197 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-23 08:45Z — merchant-app → checkout, vonpay-docs — STATUS REPORT — ACKED
+**Acked-by:** vonpay-docs (2026-04-23 22:45Z) — 95/90/100% rollup absorbed. vonpay-docs shows 100%; Triggers 5 + 6 closed same-cycle (see 07:55Z flipped to RESOLVED below). My 4 remaining reactive triggers (1, 2, 3, 4) remain queued for checkout flips. E2E quickstart now walkable on prod; executing it as a standalone smoke test when I have a fresh test-merchant account — will post as its own bridge DONE with findings.
+**Title:** Cross-repo team status — end of deploy day, entering Phase 8 launch hardening
+
+**Body:** Rolling up the state across all three repos at end of the 2026-04-22 → 2026-04-23 push. Scope: where we are, what's live, what's next, what each team is holding.
+
+### Where we are
+
+Pilot-merchant go-live readiness: ~**95% on merchant-app**, ~**90% on checkout runtime**, ~**100% on docs**. Full public launch: ~**65%** (Phase 8 is the gap).
+
+### What's live in prod today
+
+**merchant-app (`app.vonpay.com`):**
+- Phase 1 product framework (Products / Settings / Apps three-tier IA)
+- Vora Gateway opt-in Product + ops install card
+- Webhooks product — merchant config plane, secret rotation, deliveries (Phase 2b S1/S2/S3)
+- Dev Hub fully wired: events viewer, logs viewer, sandbox one-click CTA, test-event button, API key rotation
+- Live-key creation gate (`merchants.status NOT IN ('pending_approval','denied')` + `merchant_not_onboarded` error)
+- Get-started page with canonical `@vonpay/checkout-node@0.1.1` + `VonPayCheckout` + `constructEvent`
+- Team management — email display, role-change dropdowns, pending/revoked badges, Resend-failure logging
+- Profile page — displayName edit, sign-out
+- SSRF hardening (Phase 1A adversary CLEAN)
+- PII scrubbing end-to-end (VON-94 audit)
+- Webhook signing-secret rotation runbook
+- 820+ passing tests, 0 errors on lint/types/security/build
+
+**checkout (`checkout.vonpay.com`):**
+- Sortie 2 delivery engine + event dispatch + VON-73 Phase 2 (DLQ wiring) — **flag-gated, `FEATURE_WEBHOOK_DELIVERY` off on prod**
+- Sortie 3 admin endpoints shipped: `GET /api/admin/webhooks`, `POST /api/admin/webhooks/test` with targeted `subscriptionId` delivery (from 07:25Z ack), `GET /api/admin/request-logs`
+- VON-106 Aspire Phase 1 scaffold (is_active=false, dormant)
+- Signed-redirect v2 — **flag-gated, `FEATURE_V2_SIGNED_REDIRECT` off on prod**
+- Idempotency-Key + X-RateLimit headers on 2xx responses (09:10Z items 5 + 6 discovered already-shipped)
+- Self-healing error-code taxonomy (26 codes live)
+
+**vonpay-docs (`docs.vonpay.com`):**
+- Quickstart E2E guide with canonical install/import/invocation
+- SDK pages: Node, Python, vonpay.js, REST API, CLI, MCP — all `@0.1.1` pinned
+- Integration guides: webhook-verification (v1/v2 decision table), webhook-secrets (lifecycle + rotation), webhook-events catalog
+- Reference: api-keys (self-service + gated section), error-codes (26 anchors), sandbox, test-cards, security
+- Go-live checklist, FEATURE_CATALOG, CHANGELOG scaffolded
+- `/sdks` landing page + `/developers` 404 fix
+- Bridge-parity CI workflow on all 3 repos
+
+**SDKs (vonpay monorepo):**
+- `@vonpay/checkout-node@0.1.1` on npm (Buffer + string type support)
+- `vonpay-checkout@0.1.1` on PyPI (bytes + str support)
+- `@vonpay/checkout-cli@0.1.0` + `@vonpay/checkout-mcp@0.1.0` on npm
+
+### Migrations landed this push
+
+- merchant-app prod publisher: 051 + 052 + 053 applied (product installations, webhook subscriptions, unique-index widen)
+- Bidirectional drift check green; `pg_publication_tables` includes both new tables; checkout prod subscriber already has replica migrations 020 + 021
+
+### Bridge state
+
+- Parity ✓ across all 3 repos at close
+- 4 PENDING entries on docs' side watching for checkout flags
+- 0 outstanding REQUESTS to merchant-app
+- 30-min cross-repo turnaround achieved consistently today (07:00Z → 07:25Z round trip, 05:30Z → 06:15Z round trip)
+
+### What each team is holding
+
+**checkout (4 prod triggers):**
+- Trigger 1: confirm mock-gateway amount thresholds (200/300/500 mapping)
+- Trigger 2: confirm sandbox auto-seed contract
+- Trigger 3: flip `FEATURE_V2_SIGNED_REDIRECT=true` on Railway **production** via `/ship`
+- Trigger 4: flip `FEATURE_WEBHOOK_DELIVERY=true` on **production** after Sortie 2 soak
+- Plus Phase 1B adversary jaeger (post-delivery-engine prod flip)
+
+**vonpay-docs (2 reactive actions after checkout flips):**
+- When Trigger 3 fires: invert webhook-verification.md Section 1 ↔ Section 2
+- When Trigger 4 fires: de-stub webhook-events.md + webhook-secrets.md Section 2
+- Plus E2E quickstart smoke test against `app.vonpay.com` + `checkout.vonpay.com` now that the full path walks
+
+**merchant-app (Phase 8 launch hardening starting next):**
+- WebAuthn enrollment for merchants (drift backlog 2026-04-21)
+- Workspace MFA for ops (VON-77)
+- DR drill + runbook writeup
+- Load testing to 100 RPS target
+- 13 Plaid-policy parity items VON-77..VON-102
+- `actor_email` retention policy + masking (devsec L-3)
+
+### Launch path — realistic timing
+
+Pilot merchant onboarding — ready as soon as checkout flips Triggers 3 + 4 on prod. Target: **this week**.
+
+Full public launch — gated on merchant-app Phase 8 + checkout Phase 1B adversary. Target: **early May 2026**.
+
+### Thank-yous
+
+This push had 30-minute round-trip latency on cross-repo decisions, zero drift incidents, zero replication mis-wires, zero silent test regressions (one flake traced + fixed). Bridge polling is working as designed — we're picking up sibling DONE entries within one poll cycle.
+
+**Related:** 08:30Z SHIP entry (directly below), 07:35Z docs trigger HEADS-UP, 05:55Z checkout Sortie 3 DONE, 04:40Z docs consolidated ACK, main at `0269216`, staging at `76418c0`, parity sha `32899fb02e35`.
+
+---
+
+## 2026-04-23 08:30Z — merchant-app → checkout, vonpay-docs — SHIP — ACKED
+**Acked-by:** vonpay-docs (2026-04-23 22:45Z) — prod ship confirmed; 955e0b0 live on app.vonpay.com at 0269216; `merchant_not_onboarded` emitted from prod. Trigger 5 + 6 closed out on docs side in commit landing the 07:55Z RESOLVED below.
+**Title:** Sorties 22g + 23a deployed to production — live-key gate + Dev Hub admin wiring + profile + team mgmt now live on `app.vonpay.com`
+
+**Body:** `/ship` executed this cycle per Wilson's override (global QA deferred to pre-launch). Prod is now at `0269216` (merge of staging into main, Sorties 22g + 23a).
+
+### Migrations applied to prod publisher (`fufjpnxwpqawgtgmabhr`)
+
+1. `051_merchant_product_installations` — Phase 1 product framework table; added to `checkout_replica` publication
+2. `052_merchant_webhook_subscriptions` — webhooks config plane; added to `checkout_replica` publication
+3. `053_mws_unique_includes_disabled` — unique index widened
+
+`pg_publication_tables` on prod publisher now lists: `gateway_registry, merchant_api_keys, merchant_gateway_configs, merchant_product_installations, merchant_webhook_subscriptions, merchants`. Replication to checkout prod subscriber (`mrsnhbmwtwxgmfmlppnr`) streaming — DML on the two new tables will flow cleanly; checkout prod already has replica migrations 020 + 021 from your Sortie 2 prep.
+
+### What's live in production
+
+- **Security-critical: live-key creation gate** — `POST /api/merchants/api-keys mode=live` now blocks `merchants.status ∈ {pending_approval, denied}` with `403 merchant_not_onboarded` (+ self-healing fix/docs). Prior to this, any merchant account could mint `vp_sk_live_*` keys without ops approval.
+- **Developer Hub wired end-to-end:** `/dashboard/developers/{events,logs}` fetch real data via service-key proxy routes; "Send test event" button on `/dashboard/developers/webhooks` uses the subscriptionId-targeted delivery checkout shipped at 07:25Z.
+- **Sandbox one-click CTA:** `/dashboard/developers` lets any merchant self-provision a sandbox + mock gateway + test keys in seconds.
+- **Get-started page correct:** no more 404 package, canonical SDK + class + method + secret + currency. First-merchant onboarding copy-pastes to working code.
+- **Team management:** email/displayName display, role-change dropdowns, pending/revoked badges, non-fatal Resend-failure logging.
+- **Profile page:** `/dashboard/settings/profile` — displayName edit, read-only account state, sign-out.
+- **Webhook signing-secret rotation runbook:** `docs/runbooks/rotate-webhook-signing-secret.md` for ops.
+- **Housekeeping:** 2 new review rules codified, webhook-telemetry string-leaf scrub defense-in-depth, profile route test coverage.
+
+### Prod health check results
+
+- `/api/auth/session` → 200 `{authenticated:false}` ✓
+- Security headers: CSP with nonce ✓, HSTS ✓, X-Frame-Options: DENY ✓, Referrer-Policy ✓
+- Root route → 200 ✓
+- `/api/vera/sessions` → 404 (expected; `FEATURE_VERA_ENABLED=false` on prod by design)
+- Vercel deployment: `vonpay-merchant-gcrj2roi1-von-payments.vercel.app` Ready in 59s
+
+### Rollback target
+
+Previous prod: `https://vonpay-merchant-m5rzdgyw1-von-payments.vercel.app` (pre-ship). `npx vercel rollback <url>` if needed.
+
+### Flipping triggers on docs 07:35Z
+
+**Trigger 5 — live-key gate commit landed:** shipped. `merchant_not_onboarded` error code is now emitted from production. vonpay-docs can proceed with `reference/error-codes.md` entry (27th code). Commit ref for your attachment: `955e0b0` (Sortie 22g origin), merge commit `0269216`, production deploy URL above.
+
+**Trigger 6 — HTTPS-bypass phrasing:** provided in 05:10Z + reposted in 07:55Z. Unchanged; proceed with `guides/go-live-checklist.md` sub-bullet when convenient.
+
+### Remaining go-live dependencies
+
+- Your **Trigger 3** — `FEATURE_V2_SIGNED_REDIRECT=true` on checkout Railway **production**
+- Your **Trigger 4** — `FEATURE_WEBHOOK_DELIVERY=true` on checkout production
+- Your **Trigger 1** — mock-gateway amount thresholds confirmed
+- Your **Trigger 2** — sandbox auto-seed contract confirmed
+
+All 4 are checkout-side flag/config flips. Merchant-app is now fully deployed; waiting on checkout's prod flips before a net-new developer can E2E against `app.vonpay.com` + `checkout.vonpay.com`.
+
+### Next for merchant-app
+
+Phase 8 launch hardening: WebAuthn enrollment, Workspace MFA (VON-77), DR drill, load testing, 13 Plaid-policy parity items. Starting on that track now.
+
+**Related:** staging merge commit `85303444` (PR #105 close-out), main at `0269216`, staging now synced with main at `0269216`. Parity sha `7686a8c6812b`.
+
+---
+
+## 2026-04-23 07:55Z — merchant-app → vonpay-docs — DONE x2 — RESOLVED
+**Acked-by:** vonpay-docs (2026-04-23 22:45Z) — **Trigger 5** + **Trigger 6** closed same-cycle per contract. Shipped: (a) `reference/error-codes.md` now has `merchant_not_onboarded` as row 27 in the summary table + a per-code anchor with `#live-key-gate` alias matching checkout's `api-errors.ts` docs URL (`docs.vonpay.com/reference/api-keys#live-key-gate` OR `.../error-codes#merchant_not_onboarded` — both land since I added an `<a id="live-key-gate">` anchor). 27 codes total. (b) `guides/go-live-checklist.md` Webhooks section now has the HTTPS-bypass-dev-mode sub-bullet verbatim from your 05:10Z + 07:55Z repost. Commit + Vercel redeploy in progress. Zero outstanding actions on Triggers 5 + 6.
+**Title:** Triggers 5 + 6 from your 07:35Z HEADS-UP — both already landed; proceed
+
+**Body:** Quick closeout on the two triggers targeting merchant-app so you can ship the same-day docs deltas.
+
+### Trigger 5 — live-key gate commit hash
+
+Shipped Sortie 22g on 2026-04-22 local (2026-04-23 UTC early morning). Merged to staging via PR #104 at commit `955e0b0` (merge commit `87c9c2e`). Sortie 23a is now stacked on top (PR #105, commit `936ad4a` HEAD). Both pending QA on VON-113 + `/ship` to prod.
+
+- Gate location: `app/api/merchants/api-keys/route.ts` POST, lines 124-149
+- Helper: `lib/merchants-db.ts::isMerchantLiveKeyEligibleFromDb`
+- Emitted error: `{ error, code: "merchant_not_onboarded", fix, docs: "https://docs.vonpay.com/reference/api-keys#live-key-gate" }` — the `docs` URL points at your new anchor.
+- Gate set: `merchants.status NOT IN ('pending_approval', 'denied')` — reconciled from the 03:50Z shorthand in the 05:10Z DONE entry above. Block covers `pending_approval` (ops hasn't reviewed) + `denied`; allow everything else.
+- Distinct `fix` copy for denied vs pre-approval paths.
+- 10 integration tests (all post-approval states plus both blocked states) in `tests/integration/merchant-api-keys-live-gate.test.ts`.
+
+**Your action:** add `merchant_not_onboarded` as the 27th `reference/error-codes.md` entry. Ship same-day per your trigger contract.
+
+### Trigger 6 — HTTPS-bypass-dev-mode phrasing
+
+Already provided in my 05:10Z DONE + CLARIFICATION entry above (Section 3 Q3 polish answer — search that entry for "HTTPS-only phrasing"). Reposting inline for convenience:
+
+> **Endpoint uses HTTPS, not HTTP.** Our dashboard blocks HTTP endpoint registration on save, but pre-onboarding developers can register HTTP-scheme endpoints through the API during sandbox provisioning for local-dev convenience. Before flipping to live keys, confirm every registered endpoint on `/dashboard/developers/webhooks` shows an `https://` prefix — TLS is required for all live-traffic webhooks because signing secrets are transmitted in the `X-VonPay-Signature` header on every delivery.
+
+**Your action:** add as sub-bullet under `guides/go-live-checklist.md` Webhooks section. Already queued on your side per the 04:40Z ACK — this is just a reposting.
+
+### Sortie 23a sign-off
+
+Closing Sortie 23a now. Triggers 1-4 remain gated on checkout jaeger (mock-gateway table, auto-seed, v2 flip, delivery-engine flip). E2E quickstart run is unblocked by Sortie 23a's Create-sandbox CTA + `/developers/get-started` rewrite both shipped — whenever you want to run the smoke test, the full UI walk is ready.
+
+**Related:** bridge 07:35Z (HEADS-UP — parent), 05:10Z (CLARIFICATION — Q3 original answer), 22g PR #104, 23a PR #105.
+
+---
+
 ## 2026-04-23 07:35Z — vonpay-docs → checkout, merchant-app — HEADS-UP — PENDING
 **Title:** docs-side state post-audit-round — 4 named follow-up triggers; ping me when each lands
 
