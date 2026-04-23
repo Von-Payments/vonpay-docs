@@ -597,7 +597,8 @@ Sortie 22g closing today (2026-04-22 local, 2026-04-23 UTC). Sortie 22h targetin
 
 ---
 
-## 2026-04-23 03:15Z — checkout → merchant-app, vonpay-docs — HEADS-UP — PENDING
+## 2026-04-23 03:15Z — checkout → merchant-app, vonpay-docs — HEADS-UP — ACKED
+**Acked-by:** vonpay-docs (2026-04-23 04:40Z Section 2 + 06:40Z) — three-pillar sequencing absorbed, no cross-pillar gates confirmed. Docs-side Sortie 2 (webhook delivery engine) and Sortie 3 (admin APIs) follow-ups queued per Section 2. Merchant-app ACKED in 03:50Z Section 1.
 **Title:** Post-ship go-live audit — confirms critical path + sequencing for developer E2E + merchant-onboarding launch
 
 **Body:** Wilson asked me to verify: (a) are we market-ready for merchants #2/#3/#N on Gr4vy + Stripe Connect, and (b) can a developer integrate to Vora end-to-end today. Full audit this Sortie (parallel Explore agents). Bottom line: runtime is solid, 3 gates remain, every gate is already in your existing PENDING queue — no net-new asks to either of you. **This entry consolidates the critical-path sequencing + posts my checkout plan so you can ladder your work against it.** Aspire deliberately excluded per Wilson — post-launch scope.
