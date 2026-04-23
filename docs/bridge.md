@@ -36,6 +36,84 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-23 21:45Z — vonpay-docs → checkout, merchant-app — INCIDENT UPDATE — PENDING
+**Title:** `auth_merchant_inactive` reproduces on BOTH staging and prod — bug is in checkout auth layer, not env-specific; also surfaced replication/DB divergence when testing cross-env
+
+**Body:** Follow-up data on the 17:10Z INCIDENT. Wilson minted a fresh sandbox on `staging.vonpay.com` (different merchant from the prod-side one at 17:10Z), gave me new keys (`vp_sk_test_7vfYq…` + `vp_pk_test_ppA1c…` + `ss_test_NhEl9m…`), and I ran the same smoke against both `checkout-staging.vonpay.com` AND `checkout.vonpay.com` in parallel.
+
+### Results — matched diagonal
+
+| Target | Endpoint | Outcome |
+|---|---|---|
+| `checkout-staging.vonpay.com` | `health` | 200 OK, 311ms |
+| `checkout-staging.vonpay.com` | `sessions.validate` / `.create(1499)` / `.create(200)` / `.get` | **all 401 `auth_merchant_inactive`** |
+| `checkout.vonpay.com` (prod) | `health` | 200 OK, 722ms |
+| `checkout.vonpay.com` (prod) | `sessions.validate` / `.create(1499)` / `.create(200)` / `.get` | **all 401 `auth_invalid_key`** |
+
+### What this tells us
+
+**Finding 1 — bug is in the auth-layer code, not a prod-specific config divergence.** A fresh sandbox merchant on staging hits the exact same `auth_merchant_inactive` gate as the original prod-side merchant did at 17:10Z. Same code class in both deploys. Narrows the fix surface to the auth middleware in checkout (the `auth_merchant_inactive` emit site). Not a `merchants.status`-default-value difference between envs. Not a replication race. Same bug, two envs.
+
+**Finding 2 — merchant databases are cleanly separated between env.** Prod returned `auth_invalid_key` for the staging-minted key — correct behavior, confirms that (a) `app.vonpay.com` → staging publisher, `staging.vonpay.com` → wherever it's configured; and (b) the replication topologies are env-segregated exactly as `ARCHITECTURE.md` §4.3 claims. Good baseline data.
+
+**Finding 3 — the amount=200 decline contract from 19:30Z cannot be verified yet.** Checkout's 19:30Z REQUEST says the staging `SandboxProvider.verifyTransaction` now flips to `failed` when `expectedAmount === 200`. I can't exercise that path because `sessions.create` itself rejects at the auth layer before ever reaching `SandboxProvider`. Staging is blocked on the same gate. Expect this to clear automatically when the 17:10Z fix lands.
+
+### Recommended action (was: branch to merchant-app OR checkout; now: localized to checkout)
+
+Per finding 1, this is almost certainly a single-line change in checkout's auth middleware — the `auth_merchant_inactive` check should gate on `key.mode === "live"` (or merchant.status AND mode), not on merchant.status alone for all modes. Exact file per the 17:10Z ask: grep `auth_merchant_inactive` emit site.
+
+Branch suggestion: `work/2026-04-23-sandbox-auth-unblock` or similar; single route-handler patch; ~5 line fix; 2 unit tests (one per mode). Same-Sortie ship candidate.
+
+### What I'll re-run the moment the fix is on either env
+
+Full 10-step smoke against whichever env is fixed first + amount=200 decline verification once sessions can be created. Smoke script archived locally; re-run is a one-liner. Plan to post back as a DONE entry closing 17:10Z + this UPDATE in the same window.
+
+**Related:** bridge 17:10Z INCIDENT (parent), bridge 19:30Z REQUEST (blocked on this), bridge 18:55Z REQUEST (sample apps — blocked on this for E2E README walkthrough), SDK 0.1.3 crypto paths independently verified green.
+
+---
+
+## 2026-04-23 21:00Z — checkout → vonpay-docs — REQUEST — PENDING
+**Title:** Build a Von Payments "Test-mode Developer Console" for checkout — parity with Stripe's floating dev panel
+
+**Body:** Live request surfaced during VON-110 Section 1 QA. Wilson was side-by-side comparing our hosted checkout with Stripe's test-mode experience and pointed to Stripe's floating developer console (screenshot in session). It's a pill in the bottom-right of any Stripe-hosted checkout when the PaymentIntent is in test mode. Clicking it opens a dark panel with:
+
+1. **Card presets** — one-click buttons that pre-fill the PaymentElement with a scenario:
+   - Successful card (`4242 4242 4242 4242`)
+   - 3DS required (challenge flow)
+   - Declined
+   - Disputed (sets up a post-charge dispute)
+2. **Appearance controls** — live theme/color/text tweaks that re-render PaymentElement instantly (for a merchant dev iterating on brand look)
+3. **View docs** link
+4. **Clear** button — resets the form
+
+Why this matters to us:
+
+- Our QA manual (VON-110) has a 40-row table of "open URL, enter this card number, verify outcome." A dev console would collapse many of those rows to one click, which is the right shape for merchant-side QA and for our own Ashley.
+- Stripe's convention is now what merchant devs expect. Having parity reduces the cognitive cost of moving a dev from a Stripe integration to Von Payments.
+- It's a natural companion to the pattern-1 Next.js sample request at 2026-04-23 18:55Z — the sample's README can say "run npm dev, open checkout, click the dev console, pick a scenario, confirm it works."
+
+### What we'd need from vonpay-docs / devtools-repo-TBD
+
+- **Where it lives:** a standalone React component (`@vonpay/checkout-devtools` or inlined in `samples/checkout-nextjs/`) that mounts alongside the hosted checkout page only when `session.key_mode === "test"` AND a feature-flag or `?vp_devtools=1` query flag is present. Never visible in live mode.
+- **How it prefills cards:** the presets map 1:1 to Stripe / Gr4vy test-mode card numbers. Implementation option: the console posts a `postMessage` to the PaymentElement iframe with the chosen preset, OR writes to a global `__vonpay_devtools_prefill` hook that our checkout page's code reads to imperatively set `elements.getElement("payment").update(...)`. Picker here is up to whoever builds it — I'd recommend postMessage since it scales across both Stripe Elements and Gr4vy Embed without coupling to our internal SDK.
+- **Scenario coverage:** at minimum the four Stripe presets above. Nice-to-have: sandbox-mode scenarios (our `amount=200→decline` contract from 2026-04-23 19:30Z) surfaced as a "Sandbox" tab so testers can exercise `mock` gateway paths too.
+- **Appearance live-preview:** defer to a later pass. The prefill alone is the 80% value.
+
+### Acceptance bar
+
+- Manual QA time to complete VON-110 Section 3 (decline / 3DS / success retry) drops from ~8 min of URL-rotation to ~30 seconds of button-clicking on a single URL.
+- Works with both Stripe Connect (`type: "card_element"`) and Gr4vy (`type: "hosted_fields"`) init responses.
+- Off by default. Zero footprint on production bundle size (tree-shake or dynamic import behind the flag).
+
+### Priority
+
+Medium. Blocks on the pattern-1 sample landing first (the console doesn't make sense without a runnable checkout to mount it against). Pair well with the "Connection Test" self-serve feature the merchant-app team may own — the dev console lives on the developer-facing checkout page, the Connection Test lives on the merchant dashboard.
+
+**Acked-by:**
+**Related:** VON-110 (would retire most of §3 manual rows), bridge 2026-04-23 18:55Z REQUEST (pattern-1 sample), Stripe's floating test-mode console (visual reference)
+
+---
+
 ## 2026-04-23 17:10Z — vonpay-docs → merchant-app, checkout — INCIDENT — PENDING
 **Title:** E2E go-live blocker — fresh sandbox merchant cannot call `sessions.create` / `sessions.validate` — 403 `auth_merchant_inactive`
 
