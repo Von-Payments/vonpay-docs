@@ -4,10 +4,6 @@ sidebar_position: 8
 
 # API Key Types
 
-:::info Full content landing next Sortie
-This page is a stub so links from merchant-app UI and error responses resolve. Full content — rotation grace semantics, expiry behavior, key-type matrix, and the distinction from webhook signing secrets — ships next Sortie.
-:::
-
 ## Key types at a glance
 
 | Key | Prefix | Where to use it | Rotation |
@@ -33,7 +29,49 @@ The SDK validates the key prefix at construction time and rejects wrong-type usa
 
 When you rotate a secret or publishable key, the old key stays valid for **24 hours** (`grace_ends_at = NOW() + 24h`). This window lets you deploy the new key without downtime. After the grace window, the old key rejects with `auth_invalid_key`.
 
-Full rotation UX — badges, compromise runbook, classifier contract — lands with the next Sortie.
+### Rotation timeline
+
+| t = | State |
+|---|---|
+| t0 | Click *Rotate* in `/dashboard/developers/api-keys`. New key is created; old key enters grace. |
+| t0 | UI shows the raw value of the new key **once**. Copy it to your secret manager immediately. |
+| t0 → t0+24h | Both keys accepted. Deploy the new key across all your services during this window. |
+| t0+24h | Old key rejects with `auth_key_expired` (HTTP 401). Grace ends. |
+
+Rotating while the previous grace is still active is allowed — the oldest key deactivates immediately, not at the next 24-hour mark. Plan for one rotation per 24 hours.
+
+### Compromise — skip the grace
+
+If a key is exposed (leaked to a public repo, screenshot, shoulder-surf, etc.), **do not** initiate a normal rotation. Grace would keep the compromised key working for another 24 hours.
+
+Instead, from `/dashboard/developers/api-keys`:
+
+1. Click *Revoke* on the compromised key (not *Rotate*). This sets `grace_ends_at = NOW()` — old key rejects on the next request.
+2. Create a fresh key.
+3. Rotate deployed services to the fresh key.
+4. Ops (us) will also flag the key in the classifier so downstream audit logs show the revocation.
+
+### Rotation-badge states (dashboard)
+
+The `/dashboard/developers/api-keys` UI shows a badge on each key reflecting its rotation state. Useful when you're debugging why a deploy is still getting `auth_invalid_key` somewhere:
+
+- **Active** — the primary key, created or rotated-into most recently.
+- **Grace: ends in &lt;N&gt;h** — previous primary, still accepted until `grace_ends_at`.
+- **Revoked** — manually revoked via *Revoke*. Will never accept again.
+- **Expired** — grace window passed naturally.
+
+If a live-mode service suddenly starts emitting `auth_invalid_key` after a rotation, check the badge on the key that service is configured with. "Expired" means you missed the 24-hour window for at least one deploy.
+
+## Expiry behavior
+
+API keys do not have a baked-in TTL — they stay **Active** until rotated or revoked. The only paths to expiry are:
+
+- **Normal rotation** → previous key enters 24-hour grace → expires at `grace_ends_at`.
+- **Revoke** → immediate expiry.
+- **Merchant deactivation** → all keys immediately reject with `auth_merchant_inactive` (401). This is separate from per-key expiry.
+- **Manual rotation forced by ops** — e.g. response to a breach report. Shows the same *Revoked* badge.
+
+The classifier that validates inbound keys reads from a Postgres-backed cache with a ~15-second worst-case refresh interval after a dashboard rotation. A freshly-rotated key is almost always live instantly; if you see a brief window of rejection right after clicking *Rotate*, wait 15 seconds and retry before escalating.
 
 ## Related
 
