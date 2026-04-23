@@ -1,0 +1,62 @@
+name: Bridge parity
+
+on:
+  pull_request:
+    paths:
+      - "docs/bridge.md"
+      - "scripts/check-bridge-parity.mjs"
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/bridge.md"
+      - "scripts/check-bridge-parity.mjs"
+
+jobs:
+  check-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out vonpay-docs
+        uses: actions/checkout@v4
+        with:
+          path: vonpay-docs
+
+      - name: Check out vonpay-checkout
+        uses: actions/checkout@v4
+        with:
+          repository: Von-Payments/vonpay-checkout
+          ref: main
+          token: ${{ secrets.BRIDGE_PARITY_TOKEN }}
+          path: vonpay-checkout
+          sparse-checkout: |
+            docs/bridge.md
+          sparse-checkout-cone-mode: false
+
+      - name: Check out vonpay-merchant
+        uses: actions/checkout@v4
+        with:
+          repository: Von-Payments/vonpay-merchant
+          ref: main
+          token: ${{ secrets.BRIDGE_PARITY_TOKEN }}
+          path: vonpay-merchant
+          sparse-checkout: |
+            docs/bridge.md
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run parity check
+        working-directory: vonpay-docs
+        run: node scripts/check-bridge-parity.mjs
+
+      - name: Report drift context on failure
+        if: failure()
+        run: |
+          echo "::error::bridge.md is not byte-identical across vonpay-docs, vonpay-checkout, vonpay-merchant."
+          echo "::notice::Fix by copying the authoritative bridge.md into the other two repos and re-running the parity script locally before merging."
+          echo ""
+          echo "SHA per-repo:"
+          sha256sum vonpay-docs/docs/bridge.md vonpay-checkout/docs/bridge.md vonpay-merchant/docs/bridge.md || true
