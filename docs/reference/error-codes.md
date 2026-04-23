@@ -48,6 +48,8 @@ All errors return JSON with `error`, `code`, `fix`, and `docs` fields, plus an `
 | `rate_limit_exceeded` | 429 | Per-IP rate limit — retry after the `Retry-After` interval |
 | `rate_limit_exceeded_per_key` | 429 | Per-API-key rate limit (30 session-creates/min) — contact support if you need a higher ceiling |
 | `provider_unavailable` | 502 | Upstream payment provider is not responding |
+| `provider_attestation_failed` | 403 | Payment provider rejected the attestation (Vora browser-side token handoff failed) |
+| `provider_charge_failed` | 402 | Card declined or charge rejected by the upstream provider |
 | `internal_error` | 500 | Unexpected server error |
 | `webhook_missing_signature` | 401 | Webhook request is missing the signature header |
 | `webhook_invalid_signature` | 401 | Webhook signature does not match the expected value |
@@ -56,7 +58,7 @@ All errors return JSON with `error`, `code`, `fix`, and `docs` fields, plus an `
 | `transaction_verification_failed` | 403 | Transaction could not be verified with the payment provider |
 | `unsupported_media_type` | 415 | Content-Type header is missing or not `application/json` |
 
-24 codes total.
+26 codes total.
 
 Rate-limit buckets are documented on the [Rate Limits](rate-limits.md) page.
 
@@ -165,6 +167,14 @@ Each error code emitted in a response body (`docs` field) links to its section b
 ### provider_unavailable
 
 **HTTP:** 502. Upstream payment provider is not responding. Retriable — the SDK auto-retries with backoff.
+
+### provider_attestation_failed
+
+**HTTP:** 403. The upstream payment provider rejected the browser-side attestation step during a Vora-orchestrated checkout. Common causes: amount mismatch between the attestation and the session, attestation window expired, session integrity mismatch, or the attested scope (e.g., Aspire "RUO") is not supported for this card. Fix: verify the session amount matches the attestation payload, or create a new session and re-attest. Not safely retriable without investigation when the cause is a scope / integrity mismatch — capture the `X-Request-Id` before retrying. The specific provider-native reason (e.g. `ATTESTATION_EXPIRED`, `ATTESTATION_INVALID`, `MERCHANT_MISMATCH`) is included in the error `message` so the buyer can be shown a more specific hint in your UI.
+
+### provider_charge_failed
+
+**HTTP:** 402. The upstream payment provider returned a terminal charge failure — card declined, insufficient funds, fraud-rule block, or a network-side decline (issuer, scheme, or processor). Fix: prompt the buyer to try a different payment method. Retrying the same card/session is unlikely to succeed and may trigger additional issuer-side flags. This is distinct from `provider_unavailable` (transient infrastructure) and `transaction_verification_failed` (post-charge reconciliation mismatch).
 
 ### internal_error
 
