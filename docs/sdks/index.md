@@ -4,14 +4,14 @@ sidebar_position: 0
 
 # SDKs & Tools
 
-Von Payments ships client libraries and developer tools for the environments integrators most commonly work in. All are public at `0.1.0` and source-linked to the [Von Payments monorepo](https://github.com/Von-Payments/vonpay).
+Von Payments ships client libraries and developer tools for the environments integrators most commonly work in. Server SDKs at `0.1.1` (Node + Python, with webhook-payload Buffer/bytes support); CLI + MCP at `0.1.0`. All source-linked to the [Von Payments monorepo](https://github.com/Von-Payments/vonpay).
 
 ## Server-side SDKs
 
 | SDK | Install | Reference |
 |---|---|---|
-| **Node / TypeScript** | `npm install @vonpay/checkout-node@0.1.0` | [Node SDK](./node-sdk) |
-| **Python** | `pip install vonpay-checkout==0.1.0` | [Python SDK](./python-sdk) |
+| **Node / TypeScript** | `npm install @vonpay/checkout-node@0.1.1` | [Node SDK](./node-sdk) |
+| **Python** | `pip install vonpay-checkout==0.1.1` | [Python SDK](./python-sdk) |
 
 Both SDKs expose `sessions.create` / `sessions.get` / `sessions.validate`, webhook signature verification, the signed-return-URL `verifyReturnSignature` helper (v2 with `expectedSuccessUrl` / `expectedKeyMode` / `maxAgeSeconds`), typed `VonPayError` with the full `ErrorCode` union, and exponential-backoff retries on 429/5xx.
 

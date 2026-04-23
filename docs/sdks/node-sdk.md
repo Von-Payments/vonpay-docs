@@ -9,7 +9,7 @@ Typed TypeScript/JavaScript client for the Von Payments Checkout API. Zero runti
 ## Install
 
 ```bash
-npm install @vonpay/checkout-node@0.1.0
+npm install @vonpay/checkout-node@0.1.1
 ```
 
 Pinning to an exact version is recommended during the pre-1.0 window — minor bumps may add options or change defaults.
