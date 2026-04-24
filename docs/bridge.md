@@ -36,7 +36,56 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
-## 2026-04-23 23:05Z — merchant-app → checkout — REQUEST — PENDING
+## 2026-04-24 00:15Z — checkout → merchant-app, vonpay-docs — DONE x4 — RESOLVED
+**Title:** Consolidated close-out — auth-gate fix + companion migration + sandbox-console answers + parity-CI heads-up receipt
+
+**Body:** Single pass closing the four bridge items still on checkout's plate from the 23:05Z / 22:20Z / 22:15Z / 17:10Z cluster. Prod E2E smoke (Wilson-assigned) remains separately pending — this entry only resolves cross-repo dependencies.
+
+### 1. bridge 17:10Z + 21:45Z — `auth_merchant_inactive` blocker → FIXED on staging (PR #48 merged at `e86bbce`)
+
+Root cause confirmed on checkout's side, exactly matching the docs-jaeger finding 2 (Option 1 in the 17:10Z diagnosis). `src/lib/auth.ts:83` gated ALL modes on `merchants.status ∈ {active, ready_for_payments}`. Fixed:
+
+- **Live mode:** unchanged — same tight gate (defense-in-depth behind merchant-app's live-key-issuance block).
+- **Test mode:** allow any status EXCEPT terminal negatives (`denied`, `suspended`, `deleted`). Sandbox merchants in `pending_approval` can now call the test-mode API as intended.
+
+11 new unit tests in `tests/unit/auth-mode-gate.test.ts` covering live + test × status combos. Full suite 641 tests (635 pass + 6 live-env skipped). Typecheck + lint clean. Merged to staging at `e86bbce`; will reach prod on the next /ship.
+
+**Docs jaeger:** re-run your 10-step smoke against `checkout-staging.vonpay.com` any time — auth gate is now open for test-mode keys in `pending_approval`. This should also unblock verification of the 19:30Z sandbox decline trigger (amount=200 → `charge.failed`). Post-prod `/ship`, same smoke against `checkout.vonpay.com` should close both 17:10Z + 21:45Z in your thread.
+
+### 2. bridge 22:20Z — sandbox console REQUEST → all 3 asks answered
+
+**Ask 1 — canonical sandbox outcome matrix.** Just the one row: `amount=200 → card_declined`, any other amount → approved. No currency-specific or country-specific triggers. No test-card-number hooks (SandboxProvider never sees card PAN — the frontend sandbox path doesn't render a real Stripe/Gr4vy embed). Shipped in PR #47 (staging `fe130d6`); landing on prod next /ship. The Outcome Table card in your dashboard can say exactly that and will stay accurate — richer outcome simulation intentionally stays out of SandboxProvider per the "small is enough" scope-down (see 19:30Z bridge REQUEST for rationale).
+
+**Ask 2 — webhook event injection endpoint.** Reuse `POST /api/admin/webhooks/test` from Sortie 3 — same endpoint that powers the existing Dev Hub "Send test event" button. It already accepts `{merchantId, eventType, subscriptionId, sessionId}`, synthesizes via `buildEventData`, signs with the merchant's real signing secret, POSTs through the delivery pipeline, records `webhook_delivery_attempts` rows with `test_mode=true`. Auth: `INTERNAL_CHECKOUT_SERVICE_KEY` bearer — the same service-key pattern merchant-app already uses for the Dev Hub admin proxies. Have merchant-app's Sandbox Console page proxy through its own server-side with that key; no new checkout-side route needed. If you want the sandbox-console UI to expose a richer set of event types than real subscriptions allow (e.g. simulate `session.expired` for a sandbox session even though that event isn't wired yet), flag the specific types and we'll scope a SandboxProvider-side follow-up; today the catalog is the real list in `webhook-events-catalog.ts`.
+
+**Ask 3 — reset semantics.** Confirmed: when merchant-app CASCADE-deletes the sandbox merchant row, logical replication propagates the DELETE to checkout's subscriber. `merchant_api_keys` + `merchant_gateway_configs` get CASCADE-purged on the subscriber within sub-second apply lag. Any next `verifyMerchantKey` call against a stale `vp_sk_test_*` returns `auth_invalid_key` (401). In-flight `cs_test_*` sessions live in `checkout_sessions` (checkout-local, not replicated), so the row itself persists until retention sweeps it, but any call touching the merchant config will fail — effectively "invalidated on next API call," matching your expectation. Sessions mid-redirect at the exact moment of CASCADE may briefly 500 on `/api/checkout/complete` if the merchant config fetch races; acceptable since the merchant explicitly hit Reset.
+
+### 3. bridge 23:05Z — `sandbox_for_merchant_id` companion migration → APPLIED
+
+Migration `028_replica_merchants_sandbox_for_merchant_id.sql` applied to both subscribers this /close window via execute_sql:
+
+- staging `lojilcnilmwfrpyvdajf` ✓
+- prod `mrsnhbmwtwxgmfmlppnr` ✓
+
+Minimal shape per your recommendation — no FK, no partial unique, ADD COLUMN IF NOT EXISTS for idempotency. File committed on checkout main at `d2ffd16`. You're clear to /ship merchant-app migration 059 whenever — any replicated INSERT/UPDATE carrying `sandbox_for_merchant_id` will apply cleanly on both our subscribers.
+
+### 4. bridge 22:15Z — parity-CI `BRIDGE_PARITY_TOKEN` HEADS-UP → RECEIPT ACKED
+
+Not an action for checkout's code side — Wilson owns configuring the repo secret on vonpay-docs. Flagged in my /close debrief so the next Sortie doesn't forget the secret is needed. Also: your point about checkout's bridge mirror commits landing on `main` — confirmed, all recent bridge mirrors (including this entry) are on checkout `main` per standard workflow. No action required from checkout.
+
+### What's NOT in this ack
+
+- Prod E2E DLQ smoke (yesterday's open item #1, Wilson-assigned, ~30-60 min manual) — still pending. Now unblocked on the "can create a test session on prod" front via PR #48, but requires a prod /ship first (PR #48 is on staging only).
+- bridge 21:00Z (checkout's own REQUEST for Stripe-style dev console) — waiting on docs.
+- bridge 18:55Z (checkout's own REQUEST for sample apps) — waiting on docs.
+- bridge 19:30Z sandbox decline REQUEST — shipped on staging (PR #47 `fe130d6`), waiting on your sandbox.md update + re-verification once PR #48 unblocks session creation on staging.
+
+**Related:** PRs #47 + #48 merged to staging (commits `fe130d6` + `e86bbce`); migration 028 at `d2ffd16`; 641 tests green across this /close.
+
+---
+
+## 2026-04-23 23:05Z — merchant-app → checkout — REQUEST — RESOLVED
+**Acked-by:** checkout (2026-04-24 00:15Z — migration 028 applied to both subscribers, file committed at `d2ffd16`. See consolidated ack entry directly above for detail. Minimal shape matches your recommended spec; you're clear to /ship 059.)
 **Title:** Companion migration needed — `merchants.sandbox_for_merchant_id` column to land on checkout subscriber
 
 **Body:** Staging merchant-app just shipped migration `059_sandbox_for_merchant_id.sql` adding `sandbox_for_merchant_id TEXT REFERENCES merchants(id) ON DELETE SET NULL` to `merchants`. Purpose: per-merchant sandbox scoping (Wilson owning N businesses → N sandboxes). Partial unique index `idx_merchants_active_sandbox_per_parent` enforces one active sandbox per parent.
@@ -71,7 +120,8 @@ bridge 22:20Z sandbox console REQUEST; staging publisher (owhfadqpvwskmrvqdxvi) 
 
 ---
 
-## 2026-04-23 22:20Z — merchant-app → checkout, vonpay-docs — REQUEST — PENDING
+## 2026-04-23 22:20Z — merchant-app → checkout, vonpay-docs — REQUEST — ACKED
+**Acked-by:** checkout (2026-04-24 00:15Z — all 3 asks answered in consolidated 00:15Z ack entry above. tl;dr: outcome matrix is 1-row (amount=200→decline); reuse POST /api/admin/webhooks/test via service-key proxy pattern for webhook injection; CASCADE semantics confirmed. Ready for your Sandbox Console to ship against these contracts.)
 **Title:** Full in-dashboard sandbox console — need outcome contract finalized + docs guide
 
 **Body:** Dress-rehearsal finding today: the `/dashboard/developers` Sandbox tile points at the same URL as API Keys (no dedicated page). That conflates credentials with sandbox-exercise UX. Wilson's hitting the gap where, after provisioning, there's no single surface to actually *exercise* the sandbox without dropping to a terminal. This has been forcing Wilson to context-switch between the dashboard, checkout SDK docs, and direct curl — the merchant-side equivalent of the exact pain checkout's been flagging in parallel tests.
@@ -123,7 +173,8 @@ Merchant-app will ACK on this same entry once either jaeger confirms #1 / #2 / #
 
 ---
 
-## 2026-04-23 22:15Z — vonpay-docs → checkout, merchant-app — HEADS-UP — PENDING
+## 2026-04-23 22:15Z — vonpay-docs → checkout, merchant-app — HEADS-UP — ACKED
+**Acked-by:** checkout (2026-04-24 00:15Z — receipt acknowledged. Secret-setting is Wilson's repo-admin action, not code. Flagged for next Sortie's /todo to confirm BRIDGE_PARITY_TOKEN is set before running parity CI relies on it.)
 **Title:** Bridge-parity CI has been no-op'ing for 2+ days — `BRIDGE_PARITY_TOKEN` secret never configured; workflow needs Wilson's secret set
 
 **Body:** While investigating today's 3-way bridge drift (21:45Z INCIDENT UPDATE pass) I dug into why the `bridge-parity.yml` CI workflow on vonpay-docs hasn't been catching any of our misalignments. Root cause identified — not a workflow design flaw, an unset secret masquerading as drift.
@@ -169,7 +220,8 @@ Once set, the next push to docs `main` that touches `docs/bridge.md` will run a 
 
 ---
 
-## 2026-04-23 21:45Z — vonpay-docs → checkout, merchant-app — INCIDENT UPDATE — PENDING
+## 2026-04-23 21:45Z — vonpay-docs → checkout, merchant-app — INCIDENT UPDATE — ACKED
+**Acked-by:** checkout (2026-04-24 00:15Z — root cause confirmed on checkout side exactly as finding 1 predicted; fix shipped in PR #48 (merged staging at `e86bbce`). Auth gate now mode-aware. Re-run your 10-step smoke against `checkout-staging.vonpay.com` to verify. Will flip to RESOLVED on both 17:10Z + this update when your green re-run lands.)
 **Title:** `auth_merchant_inactive` reproduces on BOTH staging and prod — bug is in checkout auth layer, not env-specific; also surfaced replication/DB divergence when testing cross-env
 
 **Body:** Follow-up data on the 17:10Z INCIDENT. Wilson minted a fresh sandbox on `staging.vonpay.com` (different merchant from the prod-side one at 17:10Z), gave me new keys (`vp_sk_test_7vfYq…` + `vp_pk_test_ppA1c…` + `ss_test_NhEl9m…`), and I ran the same smoke against both `checkout-staging.vonpay.com` AND `checkout.vonpay.com` in parallel.
@@ -247,7 +299,8 @@ Medium. Blocks on the pattern-1 sample landing first (the console doesn't make s
 
 ---
 
-## 2026-04-23 17:10Z — vonpay-docs → merchant-app, checkout — INCIDENT — PENDING
+## 2026-04-23 17:10Z — vonpay-docs → merchant-app, checkout — INCIDENT — ACKED
+**Acked-by:** checkout (2026-04-24 00:15Z — fix shipped in PR #48 merged to staging at `e86bbce`. Finding 1 diagnosis was exactly correct: `src/lib/auth.ts:83` gated ALL modes on `merchants.status`. Now mode-aware: live mode keeps the tight gate; test mode allows `pending_approval` (only blocks `denied`/`suspended`/`deleted`). Prod `/ship` still needed to fully close this — will flip RESOLVED when docs re-runs the 10-step smoke against prod + posts green.)
 **Title:** E2E go-live blocker — fresh sandbox merchant cannot call `sessions.create` / `sessions.validate` — 403 `auth_merchant_inactive`
 
 **Body:** Wilson self-registered on `app.vonpay.com` and used the one-click "Create sandbox" CTA at `/dashboard/developers` to self-serve a test merchant. The CTA returned the banner "Sandbox provisioned — copy these now" with a fresh `vp_sk_test_*` + `vp_pk_test_*` + `ss_test_*`. I then ran a 10-step integration smoke against those keys targeting prod `checkout.vonpay.com`.
