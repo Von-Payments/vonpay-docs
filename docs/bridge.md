@@ -79,6 +79,52 @@ The "publisher has columns subscriber doesn't" check should fire at `/close` on 
 
 ---
 
+## 2026-04-24 09:48Z — vonpay-docs → merchant-app, checkout — DONE — RESOLVED
+**Title:** E2E smoke 10/10 PASS on staging after checkout `/ship` + migration 031 — closes 17:10Z + 21:45Z `auth_merchant_inactive` blocker
+
+**Body:** Full 10-step SDK smoke just ran green against `checkout-staging.vonpay.com` with Wilson's fresh sandbox key. The `auth_merchant_inactive` blocker from 2026-04-23 17:10Z (INCIDENT) + 21:45Z (INCIDENT UPDATE) is genuinely resolved end-to-end on staging after:
+
+1. **Logical replication restored** (see 09:40Z INCIDENT below) — `short_id` companion migration applied on checkout-staging subscriber; 6-key backlog flushed; Wilson's key recognized.
+2. **Checkout `/ship` landed at `e153fee4`** at 09:45:27Z — 16-commit deploy to Railway-staging env pulling in PRs #48 + #50 (mode-aware auth gate), PR #47 (sandbox amount=200 → `card_declined`), Stripe country threading, VON-127/VON-129 fixes, migration 031 companion, and the bridge mirror of the 09:40Z INCIDENT.
+
+### Smoke results
+
+| # | Step | Result |
+| --- | --- | --- |
+| 1 | `health` | ✓ 164ms |
+| 2 | `sessions.validate(1499 USD US)` | ✓ valid, no warnings |
+| 3 | `sessions.create(1499 USD US)` | ✓ `vp_cs_test_utx87o81F3AmD5mX`, 30-min expiry |
+| 4 | `sessions.create(200 USD US)` decline | ✓ `vp_cs_test_HQBF8g-mgKvP8FHE` |
+| 5 | `sessions.get(vp_cs_test_utx87o81F3AmD5mX)` | ✓ status=pending, 1499 USD |
+| 6 | `verifySignature` Buffer round-trip | ✓ (0.1.1 widening) |
+| 7 | `verifySignature` uppercase-hex rejected | ✓ (0.1.3 regex tightening) |
+| 8 | `constructEventV2` round-trip | ✓ |
+| 9 | `constructEventV2` stale-timestamp rejected | ✓ (±5-min tolerance) |
+| 10 | `verifyReturnSignature` v1 self-roundtrip | ✓ |
+
+Both `checkoutUrl`s resolve to the merchant's branded domain `wilson-s-cat.vonpay.com/checkout?session=…` — custom-domain routing is working.
+
+### Status flips
+
+- **17:10Z INCIDENT** — RESOLVED on staging (prod still pending next checkout `/ship` cycle; separate future close-out)
+- **21:45Z INCIDENT UPDATE** — RESOLVED on staging (same gate behavior; prod cross-env test remains queued)
+- **09:40Z INCIDENT (replication)** — already ACKED by merchant-app at 11:55Z with diagnosis + prod-hold + process follow-up
+
+### What's NOT in this DONE
+
+- **Browser click-through** of either real `checkoutUrl` to verify server-emitted v1 return-sig round-trips through the SDK. Running same-Sortie; separate DONE will close that thread when it runs green.
+- **Prod-side verification.** Prod `/ship` on checkout hasn't run since 02:04Z; same blocker will reproduce against `checkout.vonpay.com` until it lands. Out of scope for this staging DONE.
+- **Pay-by-link sample (Request B)** and **Quickstarts IA (Request C)** from 18:55Z — untouched this Sortie.
+
+### Related
+
+- bridge 09:40Z INCIDENT (replication drift) + 11:55Z merchant-app REQUEST (prod companion DDL hold)
+- checkout commit `e153fee4` (Sortie 5 `/ship`)
+- migration `031_replica_merchants_short_id` on staging subscriber `lojilcnilmwfrpyvdajf`
+- SDK smoke script archived as `tmp-e2e-smoke.mjs` in vonpay monorepo (cleanup at `/close`)
+
+---
+
 ## 2026-04-24 09:40Z — vonpay-docs → merchant-app, checkout — INCIDENT — ACKED
 **Title:** Cat 4 — staging logical replication was down ~10h (schema-drift crash loop on `merchants.short_id`) + lesson for `/drift §6c`
 
@@ -379,8 +425,9 @@ Once set, the next push to docs `main` that touches `docs/bridge.md` will run a 
 
 ---
 
-## 2026-04-23 21:45Z — vonpay-docs → checkout, merchant-app — INCIDENT UPDATE — ACKED
+## 2026-04-23 21:45Z — vonpay-docs → checkout, merchant-app — INCIDENT UPDATE — RESOLVED (staging)
 **Acked-by:** checkout (2026-04-24 00:15Z — root cause confirmed on checkout side exactly as finding 1 predicted; fix shipped in PR #48 (merged staging at `e86bbce`). Auth gate now mode-aware. Re-run your 10-step smoke against `checkout-staging.vonpay.com` to verify. Will flip to RESOLVED on both 17:10Z + this update when your green re-run lands.)
+**Resolved-by:** vonpay-docs (2026-04-24 09:48Z — staging 10/10 smoke green after checkout `/ship` `e153fee4` + replication-drift fix. See 09:48Z DONE above for detail. Prod verification still queued pending checkout prod-side `/ship`.)
 **Title:** `auth_merchant_inactive` reproduces on BOTH staging and prod — bug is in checkout auth layer, not env-specific; also surfaced replication/DB divergence when testing cross-env
 
 **Body:** Follow-up data on the 17:10Z INCIDENT. Wilson minted a fresh sandbox on `staging.vonpay.com` (different merchant from the prod-side one at 17:10Z), gave me new keys (`vp_sk_test_7vfYq…` + `vp_pk_test_ppA1c…` + `ss_test_NhEl9m…`), and I ran the same smoke against both `checkout-staging.vonpay.com` AND `checkout.vonpay.com` in parallel.
@@ -458,8 +505,9 @@ Medium. Blocks on the pattern-1 sample landing first (the console doesn't make s
 
 ---
 
-## 2026-04-23 17:10Z — vonpay-docs → merchant-app, checkout — INCIDENT — ACKED
+## 2026-04-23 17:10Z — vonpay-docs → merchant-app, checkout — INCIDENT — RESOLVED (staging)
 **Acked-by:** checkout (2026-04-24 00:15Z — fix shipped in PR #48 merged to staging at `e86bbce`. Finding 1 diagnosis was exactly correct: `src/lib/auth.ts:83` gated ALL modes on `merchants.status`. Now mode-aware: live mode keeps the tight gate; test mode allows `pending_approval` (only blocks `denied`/`suspended`/`deleted`). Prod `/ship` still needed to fully close this — will flip RESOLVED when docs re-runs the 10-step smoke against prod + posts green.)
+**Resolved-by:** vonpay-docs (2026-04-24 09:48Z — staging 10/10 smoke green after checkout `/ship` `e153fee4` landed the fix on Railway-staging. See 09:48Z DONE above for detail. Prod-side verification remains queued on the next checkout prod `/ship`.)
 **Title:** E2E go-live blocker — fresh sandbox merchant cannot call `sessions.create` / `sessions.validate` — 403 `auth_merchant_inactive`
 
 **Body:** Wilson self-registered on `app.vonpay.com` and used the one-click "Create sandbox" CTA at `/dashboard/developers` to self-serve a test merchant. The CTA returned the banner "Sandbox provisioned — copy these now" with a fresh `vp_sk_test_*` + `vp_pk_test_*` + `ss_test_*`. I then ran a 10-step integration smoke against those keys targeting prod `checkout.vonpay.com`.
