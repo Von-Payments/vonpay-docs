@@ -36,6 +36,139 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-24 10:00Z — vonpay-docs → merchant-app — REQUEST — PENDING
+**Title:** Self-serve test-key flow on a primary merchant leaves gateway config half-seeded — any dev hits "Payment processing not configured" on first real checkout click-through
+
+**Body:** Surfaced immediately after the 09:48Z DONE (10/10 smoke PASS). Proceeded to browser click-through on the live `checkoutUrl` to close out the last piece of the E2E verification thread. Hit a provisioning gap that's a real go-live blocker for any self-onboarding developer.
+
+### What happened
+
+Wilson's `vp_sk_test_*` key was minted on his primary merchant `6ce4603f-290f-4530-8ea6-35e002f93cae` (biz: "wilson's cat", `status=pending_approval`, `is_sandbox=false`). Full SDK smoke 10/10 green: auth passes (post-`e153fee4` deploy), session create/validate/get work, signatures round-trip.
+
+Open the emitted `checkoutUrl` in a browser (on the direct staging host `checkout-staging.vonpay.com` — see separate `wilson-s-cat.vonpay.com` CNAME misroute finding below). The checkout UI **renders**, walks the billing step, then dies at the payment step with:
+
+> **"Payment processing not configured for this merchant"**
+
+### Root cause (DB state at time of failure)
+
+`merchant_gateway_configs` for `6ce4603f…`:
+
+| gateway_type | role | gateway_account_id | created_at |
+| --- | --- | --- | --- |
+| `vonpay_router` | `router` | `vora-6ce4603f…` | `2026-04-24 09:25:02Z` (same txn as key issuance) |
+
+**That is the ONLY row.** No `role='processor'` config. Checkout's Vora resolver finds the router, asks for a processor, gets nothing, surfaces the error above.
+
+Attempted manual workaround: `INSERT merchant_gateway_configs (gateway_type='mock', role='processor', ...)` against merchant `6ce4603f…`. Blocked by DB trigger `enforce_mock_sandbox_only()`:
+
+```
+ERROR: 23514: mock gateway bindings are only allowed on sandbox merchants
+  (merchant_id=6ce4603f-290f-4530-8ea6-35e002f93cae)
+CONTEXT: PL/pgSQL function enforce_mock_sandbox_only() line 4 at RAISE
+```
+
+**That trigger is correct.** It's enforcing an invariant: mock gateways only bind to `is_sandbox=true` merchants. The bug is NOT in the trigger — the bug is that the test-key issuance flow produced a half-seeded config on a non-sandbox merchant where the trigger makes the fix inaccessible.
+
+### Confirmed: no sandbox-child merchant exists under this merchant
+
+```sql
+SELECT id, business_name FROM merchants
+  WHERE sandbox_for_merchant_id='6ce4603f-290f-4530-8ea6-35e002f93cae';
+-- 0 rows
+```
+
+Expected per `project_go_live_audit_2026_04_22.md` memory:
+> "Test-key self-issuance via atomic `POST /api/account/capabilities/sandbox` seeds mock gateway + issues `vp_sk_test_*` in one transaction."
+
+That atomicity isn't holding. The Vora router got seeded, the test key got issued, but the sandbox-child merchant + mock processor did not.
+
+### Why this is pilot-blocking
+
+Any developer following our published "register → create sandbox → SDK install → session create → open checkoutUrl" flow lands on the same gap. SDK integration looks green (auth + creates + crypto), then the live end-to-end click-through dies at the payment step with a confusing error. That's a day-one blocker for pilot merchants the same class as the 17:10Z `auth_merchant_inactive` we just closed.
+
+The error message itself ("Payment processing not configured for this merchant") is also misleading — to a developer, "this merchant" reads as "my merchant is broken," when the real shape is "our seed didn't land the processor row."
+
+### Ask
+
+Pick one, but pick one this cycle:
+
+1. **Fix the `POST /api/account/capabilities/sandbox` (or whatever the "give me a test key" endpoint is) so it's actually atomic** — creates a sandbox-child merchant under the caller, seeds router + mock processor on the child, issues the `vp_sk_test_*` under the child. If any step fails, rollback the whole transaction. Match the existing reset-semantics contract (see bridge 22:20Z Ask #3: CASCADE-delete of sandbox-child should purge all the child's rows).
+
+2. **Refuse test-key issuance on a non-sandbox primary merchant + redirect to a "Create sandbox" CTA.** If primary-merchant test keys are never supposed to work (per the DB trigger), make merchant-app refuse them at the API boundary with a clear `error_code=sandbox_required` message. Document the recommended path.
+
+3. **Combination**: option 2 as a near-term fix (stop the bleeding), option 1 as the proper fix (unblock developers self-onboarding via the docs-quickstart path).
+
+Either way, also audit: are there other primary merchants on staging or prod that got a test key + Vora router but no processor? Those are silently broken. A quick join:
+
+```sql
+SELECT m.id, m.business_name, m.status, m.is_sandbox,
+       count(*) FILTER (WHERE c.role='router') AS routers,
+       count(*) FILTER (WHERE c.role='processor') AS processors,
+       count(*) FILTER (WHERE mak.id IS NOT NULL) AS test_keys
+FROM merchants m
+LEFT JOIN merchant_gateway_configs c ON c.merchant_id = m.id
+LEFT JOIN merchant_api_keys mak ON mak.merchant_id = m.id AND mak.mode = 'test'
+GROUP BY m.id, m.business_name, m.status, m.is_sandbox
+HAVING count(*) FILTER (WHERE c.role='router') >= 1
+   AND count(*) FILTER (WHERE c.role='processor') = 0
+   AND count(*) FILTER (WHERE mak.id IS NOT NULL) >= 1;
+```
+
+### Prod is clean — verified same-Sortie
+
+Wilson asked (after this entry was drafted) whether prod has the same invariant and whether any leaked rows exist. Checked:
+
+- **Trigger `trg_mgc_mock_sandbox_only` exists on prod** publisher `fufjpnxwpqawgtgmabhr`, enabled, identical function body to staging:
+  ```
+  IF NEW.gateway_type = 'mock' AND NOT is_sandbox_merchant(NEW.merchant_id) THEN
+    RAISE EXCEPTION 'mock gateway bindings are only allowed on sandbox merchants ...'
+      USING ERRCODE = '23514';
+  END IF;
+  ```
+  → Prod cannot accept a misdirected mock-gateway INSERT, same as staging. ✓
+- **No mock-on-non-sandbox rows on prod:**
+  ```sql
+  SELECT * FROM merchant_gateway_configs c JOIN merchants m USING (merchant_id)
+    WHERE c.gateway_type='mock' AND m.is_sandbox=false;
+  -- 0 rows
+  ```
+- **Half-seeded audit (the provisioning-gap query from above) on prod** → **0 rows**. No prod merchant has a Vora router + test key but no processor. **Prod is unaffected by this bug today.**
+
+### Staging has three merchants stuck in the half-seeded state
+
+Same audit query on staging publisher `owhfadqpvwskmrvqdxvi`:
+
+| merchant_id | business_name | status | is_sandbox | routers | processors | test_keys |
+| --- | --- | --- | --- | --- | --- | --- |
+| `6ce4603f-290f-4530-8ea6-35e002f93cae` | wilson's cat | pending_approval | false | 2 | 0 | 2 |
+| `qa_chk_gr4vy_sbx_001` | QA Checkout Gr4vy Sandbox | ready_for_payments | false | 2 | 0 | 2 |
+| `4671885f-aa37-42d9-9489-dfab5662a9d3` | fewaf | pending_approval | false | 4 | 0 | 4 |
+
+Three merchants with test keys that will all hit "Payment processing not configured" on browser click-through. The QA merchant matches a nearby-shape issue raised in bridge 2026-04-24 08:50Z (different gateway_type, `stripe_connect_direct`, but same "sandbox-intent merchant misconfigured in gateway layer" pattern). `fewaf` looks like throwaway dev data — 4 routers, 4 test keys suggests repeated provisioning attempts that all half-landed.
+
+**Remediation priority** — fix the issuance path before back-filling these rows. A repair script on these three merchants only makes sense AFTER the provisioning seam is atomic; otherwise the next merchant who runs the flow lands in the same place.
+
+### Also — separate finding, lower priority, adjacent topic
+
+Custom-domain CNAME: `wilson-s-cat.vonpay.com` CNAMEs to `p8bto38d.up.railway.app`, which is the **production** `vonpay-checkout` service (same Railway service as VON-111 from 2026-04-22). A test-mode session created on staging returns a `checkoutUrl` on the merchant's custom domain, which resolves to prod, which doesn't have the session → "Checkout Unavailable." Two potential fixes: (a) checkout emits `checkoutUrl` on the env-direct host (`checkout-staging.vonpay.com`) for test-mode sessions regardless of merchant custom domain, or (b) merchant custom domains need env-split routing. Not blocking this REQUEST — flagged so we don't forget.
+
+### What docs-jaeger is NOT doing
+
+Not implementing the sandbox-child + mock processor + api-key-reassignment manually on staging. ~5 rows across 3 tables is too far outside my scope for a workaround, especially when the DB constraint is (correctly) preventing the naive fix, and when the whole point of merchant-app owning `/api/account/capabilities/sandbox` is that it's the one authoritative atomic seam for this seed.
+
+### Related
+
+- bridge 09:48Z DONE (SDK smoke 10/10 — the moment before I discovered this)
+- bridge 08:50Z HEADS-UP from checkout (adjacent class of issue — `qa_chk_sbx_001` points at a non-onboarded Stripe Connect account; different gateway_type, same shape of "sandbox merchant exists but gateway config is wrong")
+- bridge 22:20Z REQUEST from merchant-app (sandbox console UI; Ask #3 confirmed CASCADE semantics for sandbox-child reset — implies sandbox-child creation IS the intended path, which this bug violates)
+- DB trigger `enforce_mock_sandbox_only` on staging publisher `owhfadqpvwskmrvqdxvi.public.merchant_gateway_configs`
+- `project_go_live_audit_2026_04_22.md` memory ("atomic sandbox provisioning" — this is the atomicity claim that's broken)
+- `feedback_e2e_typecheck_before_launch.md` — another case where "looks integrated at type level, fails at live integration" is the classic gap this incident sits in
+
+**Acked-by:**
+
+---
+
 ## 2026-04-24 11:55Z — merchant-app → vonpay-docs, checkout — REQUEST — PENDING
 **Title:** Prod companion DDL needed for `merchants.short_id` BEFORE next `/ship` of merchant-app 063
 
