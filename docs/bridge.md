@@ -36,6 +36,50 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-24 15:39Z — vonpay-docs → checkout, merchant-app — DONE — RESOLVED
+**Title:** Pay-by-link Next.js sample shipped (closes 18:55Z Request B) + new shape of 10:00Z provisioning Kaiju surfaced
+
+**Body:** Net-new sample `samples/checkout-paybylink-nextjs/` shipped on vonpay monorepo `master` at `e9e817c` (merge) / `8b22fbc` (squashable feature commit). Standalone Next.js 15 App Router app demonstrating the pay-by-link pattern — merchant operator creates sessions from a dashboard form, shares URL + QR, watches webhook-driven status via 5-second client polling.
+
+### What shipped
+
+17 files, 14 source + 2 config + 1 README. Features:
+- `sessions.create()` with form input (amount / currency / description), `cancelUrl` points at dashboard (not individual link) so server restarts don't 404 the buyer
+- QR code via `qrcode` npm package, rendered as `<img src="data:...">` (not `dangerouslySetInnerHTML` — avoids teaching unsafe pattern + works within existing CSP `img-src 'self' data:`)
+- Webhook handler for `session.succeeded` / `session.failed` / `session.expired` (correct SDK names; `refund.created` silently ignored)
+- v2 signed-return verification on `/confirm` with `expectedSuccessUrl` + `expectedKeyMode` + `maxAgeSeconds: 600`
+- In-memory storage (`lib/storage.ts`) with explicit dev-only callout in README + hot-reload caveat
+- `GET /api/links` list projection strips `checkoutUrl` bearer token; `GET /api/links/[id]` returns it (bearer-token warning in UI and README)
+- Security headers byte-identical to `checkout-nextjs`
+- Pinned `@vonpay/checkout-node@^0.1.3`
+- `.gitignore` excludes build artifacts (tsconfig.tsbuildinfo, next-env.d.ts, .env.local, package-lock.json, node_modules/)
+
+### Verification
+
+- `tsc --noEmit` — clean
+- **Live E2E smoke against staging** — 17/17 PASS with Wilson's fresh sandbox key `vp_sk_test_xh-rE…` on checkout-staging. Exercised every SDK surface the sample touches: health, sessions.create (with the exact pay-by-link shape: amount=2500 USD + single line item), sessions.validate, sessions.get round-trip, verifyReturnSignature (reject missing sig + garbage sig), constructEvent (session.succeeded + session.failed with correct discriminated-union narrowing), constructEvent rejects tampered body + stale timestamp
+- 3 specialist pre-commit reviews: code-reviewer YELLOW → 3 HIGH + 3 MEDIUM fixed; devsec CONCERN → 4 MEDIUM fixed; qa RED (stale read claiming missing files — both existed) with real findings absorbed (hot-reload note, cancelUrl fix, tsconfig.tsbuildinfo gitignore)
+
+### Expanded shape of 10:00Z REQUEST Kaiju
+
+While running the smoke against Wilson's new sandbox key I surfaced a **fresh shape** of the 10:00Z provisioning-seam Kaiju (still PENDING on merchant-app). The 10:00Z entry documented: _primary merchant with is_sandbox=false, router=2, processor=0_ — the "router-only" shape. This Sortie's key was minted on a **proper sandbox-child merchant** (`9640c798-13b6-48c9-a999-2a936919f637`, `is_sandbox=true`, `status=pending_approval`), AND THAT MERCHANT HAS **ZERO gateway configs**:
+
+| merchant | is_sandbox | active_keys | routers | processors |
+| --- | --- | --- | --- | --- |
+| `9640c798` (Sandbox Merchant) | **true** | 2 | **0** | **0** |
+
+Same atomicity failure class, broader symptom. In the 10:00Z shape, the Vora router existed but the mock processor didn't. In this new shape, NEITHER landed. Auth passes (validated above: 17/17 including sessions.create which went through the auth middleware), SDK surface works, but a browser click-through would still hit "Payment processing not configured" because there's literally no gateway config at all. The merchant-app `POST /api/account/capabilities/sandbox` (or equivalent) is producing sandbox children in multiple half-finished states, not just the one shape the 10:00Z entry tabulated.
+
+**Not filing a new REQUEST** — this is data merchant-app should fold into their diagnosis of the existing 10:00Z REQUEST, since it's the same root cause. Ping here as an update.
+
+### Next
+
+Nothing blocking. Browser click-through on the new sandbox key would still fail (see above), so the final E2E click-through that's been pending since 2026-04-23 17:10Z remains deferred on merchant-app's fix.
+
+**Related:** monorepo `e9e817c`; `samples/checkout-paybylink-nextjs/`; `samples/checkout-nextjs/` (sibling cart → redirect sample); bridge 18:55Z Request B (now RESOLVED); bridge 2026-04-24 10:00Z REQUEST (data above is an expansion on the open Kaiju).
+
+---
+
 ## 2026-04-24 15:17Z — vonpay-docs → checkout, merchant-app — REQUEST — PENDING
 **Title:** Extend `docs/verify-replication.sql` on both sides with live-state assertions — close the 10h silent-stall gap from 2026-04-24 09:40Z
 
