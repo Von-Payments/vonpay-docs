@@ -60,17 +60,17 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 - **Live E2E smoke against staging** — 17/17 PASS with Wilson's fresh sandbox key `vp_sk_test_xh-rE…` on checkout-staging. Exercised every SDK surface the sample touches: health, sessions.create (with the exact pay-by-link shape: amount=2500 USD + single line item), sessions.validate, sessions.get round-trip, verifyReturnSignature (reject missing sig + garbage sig), constructEvent (session.succeeded + session.failed with correct discriminated-union narrowing), constructEvent rejects tampered body + stale timestamp
 - 3 specialist pre-commit reviews: code-reviewer YELLOW → 3 HIGH + 3 MEDIUM fixed; devsec CONCERN → 4 MEDIUM fixed; qa RED (stale read claiming missing files — both existed) with real findings absorbed (hot-reload note, cancelUrl fix, tsconfig.tsbuildinfo gitignore)
 
-### Expanded shape of 10:00Z REQUEST Kaiju
+### Correction to an earlier draft of this entry
 
-While running the smoke against Wilson's new sandbox key I surfaced a **fresh shape** of the 10:00Z provisioning-seam Kaiju (still PENDING on merchant-app). The 10:00Z entry documented: _primary merchant with is_sandbox=false, router=2, processor=0_ — the "router-only" shape. This Sortie's key was minted on a **proper sandbox-child merchant** (`9640c798-13b6-48c9-a999-2a936919f637`, `is_sandbox=true`, `status=pending_approval`), AND THAT MERCHANT HAS **ZERO gateway configs**:
+An earlier paragraph of this DONE (visible in the commit diff of `647e953` before this amendment) claimed I had surfaced a "new shape" of the 10:00Z provisioning Kaiju because merchant `9640c798` (Wilson's new sandbox child, `is_sandbox=true`) appeared to have zero gateway configs. **That claim was wrong — audit query bug on my side.** My audit counted only `role='router'` and `role='processor'`, not `role='direct'`. The mock gateway for a sandbox merchant uses `role='direct'` (single-row config, no router/processor split). Correct state:
 
-| merchant | is_sandbox | active_keys | routers | processors |
-| --- | --- | --- | --- | --- |
-| `9640c798` (Sandbox Merchant) | **true** | 2 | **0** | **0** |
+| merchant | is_sandbox | sandbox_for | gateway_type | role | active_keys |
+| --- | --- | --- | --- | --- | --- |
+| `9640c798` (Sandbox Merchant) | true | `f9dd840b…` (parent) | mock | direct | 2 |
 
-Same atomicity failure class, broader symptom. In the 10:00Z shape, the Vora router existed but the mock processor didn't. In this new shape, NEITHER landed. Auth passes (validated above: 17/17 including sessions.create which went through the auth middleware), SDK surface works, but a browser click-through would still hit "Payment processing not configured" because there's literally no gateway config at all. The merchant-app `POST /api/account/capabilities/sandbox` (or equivalent) is producing sandbox children in multiple half-finished states, not just the one shape the 10:00Z entry tabulated.
+This is a **correctly-provisioned** sandbox-child. Atomic provisioning held. The browser click-through should work against this merchant (unlike yesterday's three half-seeded primaries). The 10:00Z REQUEST remains PENDING on merchant-app with its original scope; no expanded shape from this Sortie.
 
-**Not filing a new REQUEST** — this is data merchant-app should fold into their diagnosis of the existing 10:00Z REQUEST, since it's the same root cause. Ping here as an update.
+Flagging the audit-query bug as a lesson: when scanning for provisioning-seam class issues on `merchant_gateway_configs`, include `role='direct'` in the projection. The mock gateway for sandbox children uses that role, not `router`+`processor`. The 10:00Z REQUEST's own audit SQL is correct on the non-sandbox primary case it was written for, but won't generalize to the sandbox-child case without adding a direct-role check.
 
 ### Next
 
