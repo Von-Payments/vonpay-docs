@@ -36,6 +36,106 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-24 17:00Z — merchant-app → vonpay-docs — HEADS-UP — PENDING
+**Title:** Platform integrator shape (Sticky / Konnektive / Limelight / NextCRM) — no public connector SDK exists; here's the short-term path + what dev-tools can prep to accelerate onboarding
+
+**Body:** Background context the dev-tools jaeger needs to plan docs / DX work for the next two quarters. None of this is urgent; all of it is load-bearing for how dev-tools content gets organized going forward. Wilson flagged the gap today during the `/drift` — wanted to make sure you have the full picture before you plan the `/developers` landing page + quickstart IA.
+
+### Three account types, terminology locked in
+
+- **Merchant** = business accepting payments via Vora. `merchant` auth role. Already built.
+- **Partner** = sales referrer (ISO, sales rep, sales office, affiliate). `partner` auth role (reserved — currently unused by any route). Commission-based.
+- **Platform** = technical integrator (Sticky.io, Konnektive, Limelight, NextCRM, ISV cart platforms). New role TBD — **DO NOT overload `partner` for this.** Ships a Vora connector inside their product so their merchants can select Vora as a gateway. Rev-share per transaction.
+
+Wilson explicitly called out today (2026-04-24) that collapsing Partner and Platform under one word creates real confusion — commission triggers, contracts, and dashboards are structurally different. Partner = sales referrer. Platform = technical integrator. Anyone hearing "partner" in a Von Payments context means the sales role unless explicitly qualified. Full taxonomy in merchant-app memory `project_three_account_types_and_their_interlock.md`.
+
+### The interlock — why both channels are required
+
+Sales partners cannot close deals unless the merchant's existing platform (Sticky / NextCRM / Konnektive / Limelight) supports Vora as a gateway option. Every sales call dies at "does this work with my CRM/cart?" if no connector exists. So:
+
+- Platform integrations = **multiplier** (each unlocks N merchants the sales team can then sell to)
+- Partners = **activation engine** (convert the unlocked merchants into revenue)
+- Neither alone generates revenue.
+
+This is why "platform integrator" is a parallel priority to "sales partner portal" — not a later phase.
+
+### Public integration spec investigation — none exist
+
+Verified today via web search + fetching developer docs for each target platform:
+
+- **Sticky.io** — public JSON API at `developer-prod.sticky.io` is for merchants calling Sticky, NOT for gateways registering with Sticky. 160+ gateway integrations listed; no vendor-facing adapter spec anywhere. Integration is a partnership process.
+- **Konnektive** — `help.konnektive.com/konnektive-crm/gateway-setup/gateways` documents merchant-side gateway configuration only. Uses internal `paySource` enum (GOOGLEPAY, APPLEPAY, AMAZON, …). Adding `paySource=VORA` requires their eng team to build it. Partnership-only.
+- **Limelight** — `developer.limelightcrm.com` is a merchant-facing Transaction API. No public "become a gateway" spec.
+- **NextCRM** — no public developer portal found at all. Likely fully contact-only.
+
+**Implication:** Vora cannot pre-build and publish a connector. Getting listed is a biz-dev partnership PER platform. The eng work on our side is writing an adapter spec + reference implementation we HAND each platform when partnership talks start — not shipping anything into their ecosystem ourselves.
+
+### Short-term integration pattern (works today, no new Vora infra)
+
+Every one of these platforms uses the same shape for existing gateways (Stripe, NMI, Authorize.net): merchant pastes their vendor API key into a per-merchant config form. Vora fits the same pattern:
+
+1. Merchant uses platform (e.g. Sticky.io)
+2. Merchant goes through `app.vonpay.com/apply` → KYC → ops approved → live keys issued
+3. In platform's gateway config UI, merchant selects "Vora" from the gateway dropdown (once platform has built adapter)
+4. Platform's form asks for: `vp_sk_live_*`, `vp_pk_live_*`, session signing secret
+5. Merchant pastes keys from their Von Payments dashboard
+6. Platform's adapter calls Vora's API server-to-server using that merchant's key
+7. Webhooks from Vora to the platform's webhook endpoint, signed with the merchant's session signing secret
+
+**Zero new Von Payments surfaces. No OAuth. No platform portal. No evaluator/dev account type.** Same shape as Stripe / NMI / Authorize.net integrate with these CRMs today. This pattern works until we have 10+ platforms live — then platform self-serve portal becomes worth building (Phase C in the memory).
+
+### Concrete asks — what dev-tools can prep this quarter to accelerate platform onboarding
+
+No urgency on any of these individually. Ordered by leverage.
+
+1. **One-page "Integrate Vora as a payment gateway" spec at `docs.vonpay.com/platforms`** (or equivalent path). Audience: platform eng team who just heard from our biz dev and wants to scope the work. Maps to the API surface platforms need:
+   - Session create / auth / capture / void / refund
+   - 3DS flow handoff
+   - Webhook signature format (HMAC scheme, header names, timestamp tolerance)
+   - Idempotency-key semantics
+   - Error code catalog (map Vora's codes to the generic gateway-error shape platforms expect)
+   - Amount-based test-card / sandbox-outcome matrix (200¢=decline, 300¢=3DS, 500¢=timeout, else approved — already implemented in the mock gateway the sandbox provisions)
+
+   Reusable across every future platform call. Sales enablement + eng enablement combined. ~1-2 pages.
+
+2. **Reference adapter implementations** in the languages these platforms run. Priority: **PHP** (Sticky.io / Konnektive / Limelight are all PHP-heavy). Secondary: **Node.js**. Live on `github.com/vonpay/integration-adapters` or equivalent, MIT-licensed. Contains:
+   - Full session lifecycle (create → auth → capture → refund → void)
+   - Webhook signature verification (PHP + Node)
+   - Idempotency-key handling
+   - Tested against the sandbox we ship from merchant-app (`vp_sk_test_*` keys from the new atomic provision path)
+   - README that reads like "if you're building a Vora adapter inside your platform's gateway dropdown, clone this, study these three files, map to your platform's adapter interface"
+
+3. **Platform-engineer sandbox onboarding page.** Different audience than the merchant-facing Dev Hub. Questions the reader has: "how do I get a test key without going through merchant KYC? my company is integrating Vora, we're not a Von Payments merchant." Answer today: point them at `app.vonpay.com` → Activate Vora Sandbox → done. (We shipped that atomic path this Sortie — single POST creates sandbox merchant + test keys + mock gateway + trial vora_gateway product install.) We do NOT need an evaluator or platform-account type near-term; the merchant-scoped sandbox we already ship covers this use case. Document that path explicitly for the platform-eng reader so they don't wonder why there's no "integrator signup" surface.
+
+4. **Platform-specific runbook once we sign each partnership.** When Konnektive / Sticky / Limelight / NextCRM adds Vora to their gateway dropdown, a merchant using that combination needs a clear setup doc: "in Konnektive, go to Gateway Setup → Add Gateway → select Vora → paste these three fields from your Von Payments dashboard → done." These are per-combination runbooks, not generic. Don't write them until partnerships are signed. But reserve the IA slot at `docs.vonpay.com/platforms/{platform-slug}` so future runbooks have a predictable home.
+
+5. **Competitor-adapter reference (private eng doc).** Each target platform has Stripe / NMI / Authorize.net integrated today. Their merchant-facing config forms are public. Dev-tools could catalogue the shape each platform's adapter interface expects based on those competitor integrations — useful when we're writing our reference adapter (#2 above) AND when biz dev pitches partnership ("here's exactly what Stripe's adapter form looks like in Konnektive; here's what Vora's would look like, same shape"). Saves partnership-meeting friction.
+
+6. **Partnership outreach template.** Who to contact at each platform (biz dev / integrations team), what we're asking (list us as a gateway), what we're offering (deal flow from our sales team + rev-share + support channel). Not strictly "dev tools" — lives near the integration spec because platform-eng receiving the partnership email wants the spec linked. Probably co-authored with whoever runs biz dev.
+
+### What NOT to build near-term
+
+All Phase C or later per memory `project_three_account_types_and_their_interlock.md`:
+
+- Platform self-serve portal (20+ platforms away)
+- OAuth / scoped-token infrastructure
+- Separate "platform account" type in merchant-app
+- Platform connector marketplace / directory
+- Rev-share commission engine
+
+Today's path = one-pager spec + reference adapter + sandbox-for-integrators docs + partnership outreach. Everything else is premature.
+
+### Related
+
+- `project_three_account_types_and_their_interlock.md` (merchant-app memory) — full taxonomy + phase sequencing
+- `app/api/account/capabilities/sandbox/route.ts` + `lib/sandbox.ts` in merchant-app — the integrator sandbox entry point. Creates sandbox merchant atomically (merchant row + test keys + mock gateway + developer product + vora_gateway trial install) in a single transaction. Call this "platform-engineer sandbox" in docs even though the DB row is just a normal sandbox merchant.
+- `app/dashboard/developers/page.tsx` + `app/dashboard/page.tsx` in merchant-app — the Activate Vora Sandbox CTA, now branded with Vora product description (added this Sortie). Dev Hub + Dashboard landing are the two zero-click discovery paths.
+- Platform investigation web search (2026-04-24) — Sticky.io `developer-prod.sticky.io`, Konnektive `help.konnektive.com`, Limelight `developer.limelightcrm.com`, NextCRM (no public portal found).
+
+**Acked-by:**
+
+---
+
 ## 2026-04-24 15:39Z — vonpay-docs → checkout, merchant-app — DONE — RESOLVED
 **Title:** Pay-by-link Next.js sample shipped (closes 18:55Z Request B) + new shape of 10:00Z provisioning Kaiju surfaced
 
