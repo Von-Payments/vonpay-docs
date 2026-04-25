@@ -9,7 +9,7 @@ Typed TypeScript/JavaScript client for the Von Payments Checkout API. Zero runti
 ## Install
 
 ```bash
-npm install @vonpay/checkout-node@0.1.3
+npm install @vonpay/checkout-node@0.2.0
 ```
 
 Pinning to an exact version is recommended during the pre-1.0 window — minor bumps may add options or change defaults.
@@ -29,6 +29,9 @@ const vonpay = new VonPayCheckout({
   baseUrl: "https://checkout.vonpay.com", // default
   maxRetries: 2,                          // default
   timeout: 30_000,                        // ms, default
+  errorReporter: (err, ctx) => {          // optional — see Error reporting below
+    Sentry.captureException(err, { extra: ctx });
+  },
 });
 ```
 
@@ -214,6 +217,72 @@ const health = await vonpay.health();
 // health.latencyMs => 42
 // health.version   => "2026-04-14"
 ```
+
+---
+
+## Error reporting
+
+The SDK accepts an optional `errorReporter` callback in the constructor so integrators can pipe SDK failures into their own observability stack (Sentry, Datadog, custom logger). **The SDK never phones home** — your reporter is invoked synchronously, fire-and-forget; if it throws, the SDK swallows the throw with a `console.warn` and continues.
+
+### When it fires
+
+- API request failures: non-retryable 4xx, retry-exhaustion on 5xx, network/timeout errors after retry exhaustion
+- `webhooks.constructEvent` / `constructEventV2` verification failures (signature mismatch, stale timestamp, malformed v2 header)
+
+It does **not** fire on:
+- `verifySignature` / `verifyReturnSignature` — these return boolean, never throw
+- The constructor's invalid-key-prefix throw — that's a dev-time error before the reporter is wired
+
+### Callback shape
+
+```typescript
+import type { ErrorReporter, ErrorReporterContext } from "@vonpay/checkout-node";
+
+const reporter: ErrorReporter = (err, ctx) => {
+  // err is VonPayError | Error
+  // ctx is ErrorReporterContext:
+  //   method: "sessions.create" | "sessions.get" | "sessions.validate" |
+  //           "webhooks.constructEvent" | "webhooks.constructEventV2" | "health" | ...
+  //   sdkVersion: string
+  //   url?: string         // origin + path, no query string (no PII via params)
+  //   status?: number      // HTTP status if from API response
+  //   requestId?: string   // X-Request-Id for correlation
+  //   code?: string        // server error code (auth_invalid_key, etc.)
+  //   attempt?: number     // 0-indexed retry attempt
+};
+```
+
+### Sentry example
+
+```typescript
+import * as Sentry from "@sentry/node";
+import { VonPayCheckout } from "@vonpay/checkout-node";
+
+const vonpay = new VonPayCheckout({
+  apiKey: process.env.VON_PAY_SECRET_KEY!,
+  errorReporter: (err, ctx) => {
+    Sentry.captureException(err, {
+      tags: { sdk: "vonpay-node", method: ctx.method, code: ctx.code },
+      contexts: { vonpay: ctx },
+    });
+  },
+});
+```
+
+### Datadog example
+
+```typescript
+import { VonPayCheckout } from "@vonpay/checkout-node";
+
+const vonpay = new VonPayCheckout({
+  apiKey: process.env.VON_PAY_SECRET_KEY!,
+  errorReporter: (err, ctx) => {
+    logger.error("vonpay sdk error", { err, ...ctx });
+  },
+});
+```
+
+`errorReporter` is opt-in and additive — passing nothing preserves pre-0.2.0 behavior exactly. Errors still propagate via `throw` regardless of whether the reporter is configured.
 
 ---
 

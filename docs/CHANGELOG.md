@@ -7,6 +7,31 @@ title: Changelog
 
 What's shipped, in developer-facing terms. For the full monorepo commit log see [github.com/Von-Payments/vonpay](https://github.com/Von-Payments/vonpay).
 
+## 2026-04-25 — SDK 0.2.0 (Phase 2 visibility — `errorReporter` callback)
+
+Adds an optional `errorReporter` (Node) / `error_reporter` (Python) callback to the SDK constructor so integrators can pipe SDK failures into their own observability stack (Sentry, Datadog, custom logger). **The SDK never phones home** — the callback is invoked synchronously, fire-and-forget. Closes Phase 2 of the visibility plan from bridge `2026-04-25 17:32Z`.
+
+**Backward compatibility:** opt-in. Passing nothing preserves pre-0.2.0 behavior exactly. Errors still propagate via `throw`/`raise` regardless of whether the reporter is configured.
+
+**`@vonpay/checkout-node@0.2.0`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-node))
+- **New:** `errorReporter?: (err, ctx) => void` config option. Fires on non-retryable 4xx, retry-exhaustion 5xx, network errors after retry exhaustion, and `webhooks.constructEvent` / `constructEventV2` failures. Does NOT fire on `verifySignature` / `verifyReturnSignature` (those return boolean) or constructor key-prefix errors (dev-time).
+- **New types:** `ErrorReporter`, `ErrorReporterContext` (re-exported from package root). Context includes: `method`, `sdkVersion`, `url` (query-string stripped — no PII via params), `status`, `requestId`, `code`, `attempt`.
+- **Reporter throws are swallowed** with a `console.warn` — an observability bug must not break the SDK call. The original `VonPayError` still propagates.
+- 10 new unit tests covering: fires on 4xx with full context, fires once after retry-exhaust on 5xx, fires exactly once at exhaustion (not on each intermediate retry), fires on network error, fires on constructEvent failure, fires on constructEventV2 stale-timestamp, no-op on success path, no-op when undefined (back-compat), swallows reporter throws, strips query string from URL. Test count 45 → **55**.
+
+**`vonpay-checkout==0.2.0`** ([PyPI](https://pypi.org/project/vonpay-checkout/))
+- Matching `error_reporter` keyword arg on `VonPayCheckout(...)`. Snake-case naming (`sdk_version`, `request_id`, etc.) on `ErrorReporterContext` dataclass.
+- Reporter exceptions are caught and logged via `logging.warning` on the `vonpay.checkout` logger — same swallow-on-throw posture as Node.
+- `_Webhooks` now holds a client reference so `construct_event` / `construct_event_v2` can route to the reporter. Static `verify_signature` is unchanged.
+- 8 new pytest cases mirroring the Node coverage (5 webhook-path + 3 HTTP-layer via `httpx.MockTransport` for non-retryable 4xx, retry-exhaust 5xx, query-string stripping). Test count 28 → **36**.
+- `User-Agent` header now reflects the SDK version (`vonpay-python/0.2.0`); version is read dynamically from `importlib.metadata` to prevent drift with `pyproject.toml`. New review rule `sdk/python-version-not-hardcoded` codifies this.
+
+**Sample apps** — `samples/checkout-nextjs/` and `samples/checkout-paybylink-nextjs/` ship a commented-out `errorReporter` block in their server-side route handlers showing the Sentry wiring pattern. SDK pin bumped `^0.1.3` → `^0.2.0`. `samples/checkout-express/` had a `"latest"` pin (anti-pattern); now pinned to `^0.2.0`. `samples/checkout-flask/` requirements pinned to `>=0.2.0`.
+
+See [Node SDK → Error reporting](sdks/node-sdk.md#error-reporting) and [Python SDK → Error reporting](sdks/python-sdk.md#error-reporting) for full callback contract + Sentry/Datadog wiring examples.
+
+---
+
 ## 2026-04-23 — SDK 0.1.3 (security + quality patch)
 
 All 4 monorepo packages bumped to `0.1.3` in one coordinated cycle. Driven by a post-launch Automata review that surfaced 7 HIGH + 8 MEDIUM findings. Post-fix re-review (code-reviewer + devsec + qa) was green. No runtime crash or data loss in 0.1.2; 0.1.3 tightens the hardening envelope around it.
