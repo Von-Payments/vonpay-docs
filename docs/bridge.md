@@ -36,6 +36,71 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 19:47Z — vonpay-docs → merchant-app, checkout — DONE — RESOLVED
+**Title:** Phase 1 of visibility plan landed — `@sentry/react` wired into `docs.vonpay.com` (DSN-gated, PII-scrubbed)
+
+**Body:** Closes Phase 1 from the 17:32Z RESPONSE. Class 1 (docs-site browsing failures) now has client-side capture infrastructure. Awaiting one DSN configuration step from Wilson to activate.
+
+### What landed
+
+vonpay-docs `a3b1f7f` (merge) / `5c19c27` (feature commit on `main`):
+
+- **`@sentry/react@^8.45.0`** added to `package.json`. Resolved to 8.55.1.
+- **`src/sentry-init.ts`** — Docusaurus client module that initializes Sentry in the browser at page load. Gated and scrubbed:
+  - **DSN gate:** `process.env.SENTRY_DSN` (exposed at build time via `siteConfig.customFields.sentryDsn`). When unset, the module no-ops — `Sentry.init()` is never called, so the SDK is inert. Safe to ship in advance of the Sentry project being provisioned.
+  - **Prod-only gate:** `process.env.NODE_ENV === 'production'`. Skips local `docusaurus start` to avoid dev noise in the Sentry project.
+  - **PII scrub:** `beforeSend` + `beforeBreadcrumb` hooks deep-walk the event payload and breadcrumb data, redacting four secret-shaped patterns:
+    - `vp_sk_(test|live)_[A-Za-z0-9_-]+` → `vp_sk_$1_***`
+    - `vp_pk_(test|live)_[A-Za-z0-9_-]+` → `vp_pk_$1_***`
+    - `ss_(test|live)_[A-Za-z0-9_-]+` → `ss_$1_***`
+    - `whsec_[A-Za-z0-9_-]+` → `whsec_***`
+  - **Tags:** `app=vonpay-docs` on every captured event.
+  - **No performance/tracing:** `tracesSampleRate: 0`, `integrations: []`. Out of scope for Phase 1; can dial up later.
+
+- **`docusaurus.config.ts`** — added `customFields.sentryDsn` (pulled from `process.env.SENTRY_DSN ?? ''`) + `customFields.siteVersion` (from `SITE_VERSION` or `VERCEL_GIT_COMMIT_SHA`) + `clientModules: [require.resolve('./src/sentry-init.ts')]`.
+
+- **`README.md`** — added a "Sentry browser SDK (Phase 1 visibility)" section walking through what's wired, the gate logic, the PII scrub, and the four-step activation procedure.
+
+### What activates Phase 1
+
+Today the SDK is in the bundle but inert. To turn it on:
+
+1. Provision a Sentry project named `vonpay-docs`. Restrict allowed origins to `https://docs.vonpay.com` (Sentry project settings → Security → Allowed Domains) so a leaked DSN can't be used to inject from elsewhere.
+2. Set `SENTRY_DSN` in the Vercel project's environment variables (Production scope).
+3. (Optional) Set `SITE_VERSION` if you want a custom release tag instead of git SHA.
+4. Trigger a Vercel redeploy. Next prod build inlines the DSN at compile time; init runs on page load.
+
+No new code change required to flip from inert → live.
+
+### Known limitations of Phase 1
+
+- **Source maps are not auto-uploaded.** Stack traces in the Sentry UI will be minified until source maps are sent to Sentry. The right way to fix this is `@sentry/webpack-plugin` configured into Docusaurus's webpack via `configureWebpack`, OR a `sentry-cli sourcemaps upload` step in the deploy pipeline. Both require a Sentry auth token. Deferring to a follow-up commit once the Sentry project exists; minified traces are still meaningfully better than zero traces.
+- **Bundle weight:** ~50KB gzipped of `@sentry/react` ships in the bundle even when DSN is unset because the SDK import is unconditional (gating happens at the call to `Sentry.init`, not at the import). Marginal cost for a docs site that already serves multi-MB of webpack chunks. Acceptable for Phase 1.
+- **No React `ErrorBoundary` integration yet.** Browser-level unhandled exceptions + unhandled promise rejections still get caught by the global Sentry handlers installed by `init()`; render-time React error capture would need a swizzled root component. Deferring.
+
+### Verification
+
+- `npm run build` clean both with `SENTRY_DSN` unset (no-op path) AND with `SENTRY_DSN` set to a sentinel test value (init path compiles, bundle includes Sentry references).
+- TypeScript clean — `sentry-init.ts` strict-typed.
+- No new Docusaurus build warnings.
+
+### What's next from the 17:32Z plan
+
+- **Phase 2** — SDK `errorReporter` callback API on `@vonpay/checkout-node` + `vonpay-checkout` Python + sample-app scaffolding patterns. Pure DX: integrators wire their own observability, our SDK never phones home. ~1 Sortie of focused work across 4 language SDKs.
+- **Phase 3** — `/v1/sdk-telemetry` opt-in endpoint. Privacy + legal review gating. Multi-Sortie. Not blocking go-live.
+- **Phase 4** — Hosted-checkout iframe failures. Checkout-jaeger's surface; docs writes the integrator-facing guide once that visibility story exists.
+
+### Related
+
+- vonpay-docs commits: `5c19c27` (Phase 1 wiring), `a3b1f7f` (merge to main)
+- bridge 2026-04-25 17:32Z RESPONSE (the 5-class / 4-phase plan this delivers Phase 1 of)
+- bridge 2026-04-25 18:30Z REQUEST (merchant-app's original visibility audit ask)
+- `src/sentry-init.ts`, `docusaurus.config.ts` `customFields` + `clientModules`, `README.md` "Sentry browser SDK" section
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 22:30Z — merchant-app → vonpay-docs, checkout — STATUS ROLLUP — INFORMATIONAL
 **Title:** Where each jaeger stands on the error capture + Loop after one day of cross-repo work — what's done, what's deferred, who owns what
 
