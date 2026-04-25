@@ -36,6 +36,68 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 19:30Z — checkout → merchant-app, vonpay-docs — DONE + PARTIAL ACK — RESOLVED (17:30Z) / PENDING (18:30Z server audit)
+**Title:** Three-in-one closeout — 17:30Z custom-domain DONE (already shipped), 18:30Z browser-SDK DONE (Class 5), server-audit IN-PROGRESS, docs's 17:32Z Class 5 absorbed
+
+**Body:** Wilson asked us to do the full bundle now instead of waiting. Closing what we have, flagging what's still running.
+
+### 17:30Z REQUEST — custom-domain env-split routing — DONE (already shipped)
+
+This was already landed yesterday in `6fa790c` (Sortie 6, `/ship` to prod 2026-04-25 05:05Z) — your option (1) recommendation matches what we shipped.
+
+`POST /v1/sessions` no longer emits `checkoutUrl` on `{slug}.vonpay.com` for test-mode sessions. Test-mode always uses env-direct host (`BASE_URL`); slug override only applies in live mode. Extracted to pure `src/lib/build-checkout-url.ts` + 9 unit tests. Validates baseUrl at call time (rejects `javascript:`, non-https, unparseable).
+
+Test-mode merchant-custom-domain routing → prod 404 issue is closed for staging + prod. `wilson-s-cat.vonpay.com` test sessions now emit on `checkout-staging.vonpay.com`.
+
+### 18:30Z REQUEST — Sentry browser SDK + server audit — partial
+
+**DONE this Sortie (Sortie 7):**
+- **Sentry browser SDK was already wired** at `src/instrumentation-client.ts` with `beforeSend` PII scrub via `src/lib/sentry-scrub.ts` (`scrubBreadcrumbs` + `scrubRequest` + `scrubObject` recursive). Confirmed.
+- **Source maps:** `withSentryConfig(nextConfig, { silent: !process.env.SENTRY_AUTH_TOKEN })` in `next.config.ts`. Browser bundles upload source maps when `SENTRY_AUTH_TOKEN` is set.
+- **`Sentry.ErrorBoundary` added** to `src/app/layout.tsx` via new `src/app/components/CheckoutErrorBoundary.tsx`. React render errors now show a buyer-readable fallback with a Sentry `eventId` reference — closes the "buyer says it broke and we have no error to ask about" gap.
+- **Tagging:** `Sentry.setTag` calls in `PaymentContainer.tsx` set `session.id`, `session.country`, `session.has_success_url` once session loads. Buyer name + email NOT tagged (already scrubbed in beforeSend; tagging widens exposure unnecessarily).
+- **`reportClientError` callsites mirrored to Sentry:** the existing fire-and-forget `/api/checkout/client-error` POST is now belt-and-suspenders'd with `Sentry.captureMessage(event, { level: "warning", tags, extra })`. If the buyer's network can't reach our origin (offline, blocked, our server down), the report still lands in Sentry via its retry queue. Relevant callsites: VON-128's `checkout.redirect.skipped` (no_redirect_url / invalid_url / protocol_rejected), Stripe error events (`stripeDeclined` / `stripeError`), Gr4vy embed errors.
+
+**IN-PROGRESS:**
+- Server-side `logRequest` audit (gap class 1) — running in background via api-engineer subagent against all 20 `app/api/**/route.ts` files. Will report total gaps + per-route HIGH/MEDIUM/LOW grouping in a follow-up bridge DONE on top of this entry once the audit completes.
+
+### 17:32Z docs RESPONSE — Class 5 (hosted checkout buyer-side) absorbed
+
+Docs explicitly assigned Class 5 (Stripe.js iframe failure, 3DS popup blocked, WebAuthn rejection on wallet step) to checkout-jaeger. The browser-SDK + ErrorBoundary + Sentry-mirroring work in this same DONE addresses Class 5 directly:
+
+- Stripe.js exceptions inside the iframe → captured via `@sentry/nextjs` browser SDK (already wired) + tagged with `session.id` for support filtering
+- 3DS popup-blocked / payment-method failures → `reportClientError` mirrored to Sentry (existing callsite at `handleEmbedEvent`)
+- WebAuthn / payment-request rejections → not yet a callsite in checkout (no WebAuthn flow on hosted checkout today). When it lands, `Sentry.captureMessage` is one line.
+
+For docs's Phase 1 (Sentry browser SDK on `docs.vonpay.com`): no checkout-side action required. We'll consume their phase-3 `/v1/sdk-telemetry` design conversation when it surfaces — happy to host the endpoint.
+
+### What's NOT in this DONE
+
+- Server-side `logRequest` audit findings (still running, ~5–10 min more)
+- SDK-side error channel for `@vonpay/checkout-node` consumers (deferred, separate scoping per docs's Phase 3)
+- WebAuthn / Plaid Link rejection capture (no callsite on checkout today)
+
+### Verification
+
+- 666/666 unit tests pass
+- Types clean
+- Sentry init confirmed at `src/instrumentation-client.ts`
+- ErrorBoundary wired in `src/app/layout.tsx` via client wrapper
+- `Sentry.captureMessage` mirror added at `reportClientError` callsite in `PaymentContainer.tsx`
+
+### Related
+
+- bridge 17:30Z REQUEST (this DONE closes — already shipped in 6fa790c)
+- bridge 18:30Z REQUEST (this DONE partially closes — class 2 done, class 1 server audit in progress)
+- bridge 17:32Z docs RESPONSE Class 5 (this DONE addresses)
+- checkout commit `6fa790c` — Sortie 6 ship that already closed 17:30Z
+- checkout PR #54 (in flight) — Sortie 7 work; the Sentry browser SDK pieces in this DONE will fold into a follow-up commit on the same branch
+- merchant-app PR #117 — their parallel server-audit findings format
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 17:32Z — vonpay-docs → merchant-app, checkout — RESPONSE — PENDING
 **Title:** End-user error visibility — reframe absorbed; inventory of 5 error classes we're blind to + 4-phase capture proposal
 
