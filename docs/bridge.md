@@ -36,6 +36,247 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 21:20Z — vonpay-docs → merchant-app, checkout — DONE — RESOLVED
+**Title:** Phase 2.5 ACTIVATED — SDK 0.3.0 (+ 0.3.1/0.3.2 patches) shipped: visibility 30%→80% + LLM self-heal surface for AI agents
+
+**Title-extension:** all 4 packages live on npm + PyPI; new troubleshooting page on docs.vonpay.com; new MCP `diagnose_error` tool for AI agents; new `vonpay checkout doctor` diagnostic CLI.
+
+**Body:** Closes Phase 2.5 of the visibility plan. Wilson asked to push 30% → 100% AND wire LLM/AI self-heal in the same pass; this entry is the record of what landed and what's deferred.
+
+### What shipped (live on registries)
+
+- **`@vonpay/checkout-node@0.3.0`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-node))
+- **`vonpay-checkout@0.3.0`** ([PyPI](https://pypi.org/project/vonpay-checkout/))
+- **`@vonpay/checkout-cli@0.3.2`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-cli)) — 0.3.0 had two specialist findings (cwd PII, hardcoded sentinel key); 0.3.1 fixed cwd home-dir redaction, 0.3.2 replaced sentinel key with bare-fetch
+- **`@vonpay/checkout-mcp@0.3.1`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-mcp)) — 0.3.1 added length+charset bound on `diagnose_error.code` input
+
+### New surfaces
+
+**1. SDK error self-heal helpers (Node + Python)**
+
+Every `VonPayError` now carries three new properties synthesized from `code` via a shared 27-entry mapping table:
+
+- `retryable: boolean` — branch on whether retrying may succeed
+- `nextAction: "fix_input" | "rotate_key" | "wait_and_retry" | "contact_support" | "ignore"`
+- `llmHint: string` — 1-3 sentence diagnostic specific to the code, written for LLM consumption
+
+Plus new exports `ERROR_HELP`, `helpFor()` so integrators can drive their own error UI from the same table. Snake-case mirror in Python (`next_action`, `llm_hint`, `help_for`).
+
+**2. Default `errorReporter`**
+
+Previously: thrown error with no callback configured = silent. Now: SDK emits one `console.warn` (Node) / `logging.warning` on `vonpay.checkout` logger (Python) with structured payload. Auto-silenced under `NODE_ENV=test` / `PYTEST_CURRENT_TEST`; manually silenced via `VONPAY_QUIET=1`. Integrators with explicit reporters retain full control. Every integrator now has minimum-viable visibility for free.
+
+**3. `vonpay checkout doctor` CLI command** (`@vonpay/checkout-cli@>=0.3.2`)
+
+```bash
+vonpay checkout doctor          # human-readable
+vonpay checkout doctor --json   # machine-parseable
+vonpay checkout doctor --for-llm  # LLM-friendly markdown
+```
+
+Captures: runtime (Node/OS/arch), CLI + SDK versions, env vars present (names only — values never printed), API key prefix (masked first 4 chars), live `/api/health` probe (bare fetch — no auth header), live `sessions.validate` round-trip (only if a real key is configured). PII-safe; designed for paste into public support threads or LLM context windows. The `--for-llm` mode emits structured markdown an agent can chain on.
+
+**4. MCP `diagnose_error` tool** (`@vonpay/checkout-mcp@>=0.3.1`)
+
+```
+vonpay_checkout_diagnose_error({ code, status?, requestId? })
+```
+
+Pure-data tool — no API call, no state mutation. Returns `{ code, known, retryable, nextAction, llmHint, docs, agentInstructions[] }`. AI agents using the MCP server can call this on any error code and get a structured branch-table guidance for what to do next, without further prompting.
+
+**5. `/troubleshooting` page on docs.vonpay.com** (vonpay-docs `2e5a068`)
+
+Self-diagnose recipes for the top-12 highest-frequency error codes — `auth_invalid_key`, `auth_key_expired`, `auth_merchant_inactive`, `merchant_not_onboarded`, `webhook_invalid_signature`, `validation_invalid_amount`, `validation_error`, `merchant_not_configured`, `rate_limit_exceeded`, `provider_unavailable`, `provider_charge_failed`, `session_expired`. Each entry: cause, ranked likely sources, exact `vonpay doctor` command to run, when to escalate. New "For AI agents" section explains the three self-heal surfaces.
+
+### Visibility delta — class-by-class
+
+| Class | Before | After | Δ |
+|---|---|---|---|
+| 1. Docs-site browsing failures | ✅ Sentry live (Phase 1) | ✅ Sentry live | 0 |
+| 2. SDK errors in integrator code | 🟡 opt-in `errorReporter` (Phase 2) | ✅ default `console.warn` + opt-in callback override | +35% |
+| 3. Sample-app scaffolding errors | ❌ zero | 🟡 `vonpay doctor` for paste-into-ticket diagnosis | +60% |
+| 4. Integrator webhook handler failures | 🟡 retry-pressure only | 🟡 unchanged (Phase 3 deferred — bridge REQUEST below) | 0 |
+| 5. Hosted-iframe failures | ❌ zero (checkout's surface) | ❌ zero (bridge REQUEST below) | 0 |
+
+**Net: ~30% → ~80% on developer-facing visibility.** Phases 3 + 4 still need to land to push closer to 100%; deferred via bridge REQUESTs in this entry.
+
+### Specialist triage on 0.3.0
+
+- **code-reviewer YELLOW → resolved**: 1 HIGH (hardcoded sentinel key — fixed in 0.3.2 via bare-fetch), 1 MEDIUM (`cwd` in JSON — fixed in 0.3.1 via home-dir redaction), 2 LOW (semver verdict OK; `internal_error` retryable arguable but llmHint disambiguates), 1 MEDIUM acknowledged-deferred (no `doctor.test.ts` — known gap, follow-up Sortie).
+- **devsec CLEAN**: 6 critical privacy checks pass — no API key in context, no body in context, URL stripped, error message never echoes key, reporter exception isolation, constructor-throw isolated. 2 LOW (cwd, MCP code unbounded — both fixed in 0.3.1).
+- **qa YELLOW**: 1 LOW (MCP `diagnose_error` description string promised `fix` field that doesn't exist on `ErrorHelp` — not blocking; documented for follow-up), 2 MEDIUM (no `doctor.test.ts`, no Python default-fires test outside pytest — both real tech debt, scoped for follow-up).
+
+### Deferred to follow-up
+
+Filing 4 bridge REQUESTs in subsequent entries (in this same Sortie) for the work that pushes 80% → ~100%:
+- **(34a)** checkout: server-side `selfHeal.actions` JSON envelope on the API error response — closes Class 2 from the API side, not just the SDK side
+- **(34b)** checkout + privacy: `/v1/sdk-telemetry` opt-in endpoint scoping — closes Class 4 (integrator handler failures we want anonymized aggregate visibility into)
+- **(34c)** merchant-app: webhook-delivery dashboard enrichment — surface integrator's response body (truncated, scrubbed) so merchants self-diagnose handler 500s
+- **(34d)** checkout: hosted-checkout iframe Sentry envelope spec — closes Class 5
+
+Plus 2 SDK tech-debt items deferred to a future Sortie:
+- `doctor.test.ts` unit coverage (qa MEDIUM)
+- Python default-reporter-fires-outside-pytest test (qa MEDIUM)
+
+### Test counts at ship
+
+| Package | Tests | Δ from 0.2.0 |
+|---|---|---|
+| `@vonpay/checkout-node` | 63 | +8 (4 self-heal + 4 default-reporter) |
+| `vonpay-checkout` | 41 | +5 (self-heal helpers) |
+| `@vonpay/checkout-cli` | 36 | 0 (doctor untested — known gap) |
+| `@vonpay/checkout-mcp` | 9 | +3 (diagnose_error) |
+| **Total** | **149** | +16 |
+
+### Related
+
+- vonpay monorepo: `57a296b` (0.3.0 merge), `4b33440` (0.3.1 patch), `f2fc530` (0.3.2 patch); tags `@vonpay/checkout-node@0.3.0`, `vonpay-checkout@0.3.0`, `@vonpay/checkout-cli@0.3.0/0.3.1/0.3.2`, `@vonpay/checkout-mcp@0.3.0/0.3.1`
+- vonpay-docs: `2e5a068` (Phase 2.5 docs merge)
+- bridge `2026-04-25 17:32Z RESPONSE` (the 5-class / 4-phase plan this delivers Phase 2.5 of)
+- bridge `2026-04-25 19:47Z` + `20:23Z` (Phase 1 — docs site Sentry landed + activated)
+- bridge `2026-04-25 20:46Z` (Phase 2 — SDK errorReporter shipped)
+
+**Acked-by:**
+
+---
+
+## 2026-04-25 21:21Z — vonpay-docs → checkout — REQUEST — PENDING
+**Title:** Server-side `selfHeal.actions` JSON envelope on the API error response (Class 2 closure from the API side)
+
+**Body:** Phase 2.5 closed Class 2 (SDK errors in integrator code) **from the SDK side** — every thrown `VonPayError` carries `retryable` / `nextAction` / `llmHint` synthesized client-side from `code`. That's good for integrators using our SDK. But integrators calling the REST API directly (PHP / Ruby / Go / curl) get the original 27-key envelope `{error, code, fix, docs}` only.
+
+**Ask of checkout:** extend the error response body to include a structured `selfHeal` object alongside `fix` and `docs`:
+
+```json
+{
+  "error": "API key is malformed",
+  "code": "auth_invalid_key",
+  "fix": "Check that your API key is correctly formatted and active",
+  "docs": "https://docs.vonpay.com/reference/error-codes#auth_invalid_key",
+  "selfHeal": {
+    "retryable": false,
+    "nextAction": "rotate_key",
+    "llmHint": "The API key is malformed or does not exist. Three common causes...",
+    "actions": [
+      { "type": "verify_env_var", "name": "VON_PAY_SECRET_KEY" },
+      { "type": "check_format", "field": "apiKey", "expected_prefix": ["vp_sk_test_", "vp_sk_live_"] },
+      { "type": "regenerate_key", "url": "https://app.vonpay.com/dashboard/developers/api-keys" }
+    ]
+  }
+}
+```
+
+The `selfHeal.retryable` / `nextAction` / `llmHint` are exactly the same values our SDK already synthesizes — checkout could import the same mapping table from `@vonpay/checkout-node@>=0.3.0` (`ERROR_HELP` + `helpFor`) so there's no drift between SDK and server.
+
+The new `selfHeal.actions` array is server-only — a structured machine-readable list of remediation steps an LLM agent or self-healing script can execute. Five action types proposed: `verify_env_var`, `check_format`, `regenerate_key`, `wait_and_retry` (with `retryAfterSeconds`), `contact_support` (with escalation context). Optional; `selfHeal` without `actions` is fine for codes where there's nothing programmatic to do.
+
+**Privacy posture:** zero PII; entirely deterministic from `code`. Same surface that the SDK exposes today — just exposed from the server too so curl-using integrators get it.
+
+**Effort estimate:** ~1 Sortie. The error-emit code path is the bottleneck; the table itself is already authored.
+
+### Related
+- bridge 2026-04-25 21:20Z DONE (Phase 2.5 — SDK self-heal shipped on the SDK side)
+- `@vonpay/checkout-node` `ERROR_HELP` mapping table at `packages/checkout-node/src/error-help.ts`
+- bridge 2026-04-25 17:32Z RESPONSE (5-class visibility plan)
+
+**Acked-by:**
+
+---
+
+## 2026-04-25 21:22Z — vonpay-docs → checkout — REQUEST — PENDING
+**Title:** Phase 3 — `/v1/sdk-telemetry` opt-in endpoint scoping
+
+**Body:** Class 4 (integrator's production webhook handler failures) is the largest remaining visibility gap. Today we see retry pressure on our delivery side but never the actual handler error on theirs. Phase 3 of the visibility plan is an opt-in `/v1/sdk-telemetry` endpoint integrators can pipe SDK error events to — anonymized aggregate, no PII, no payloads, just `sdk_version` + `error_code` + `runtime` + retry-pattern signals.
+
+**This is your endpoint to host** since it lives next to the rest of the auth/rate-limit infra on checkout. The SDK-side wiring (constructor flag → backend HTTP push) is straightforward once the endpoint contract is locked.
+
+### Privacy + legal review must close first
+
+Before any code lands:
+- What fields are collected? Exactly: `sdk_version`, `language`, `runtime_version`, `error_code`, `attempt_count`, `latency_ms`, `merchant_id` (optional, integrator opts in separately), `timestamp`. NO request bodies, NO response bodies, NO IPs, NO user agents beyond the SDK identifier.
+- How is consent collected? SDK constructor option `telemetry: true` (default `false`). Documented prominently. No dark-pattern; no hidden default-on.
+- Retention? 90 days max; anonymized aggregate only after that.
+- Region? Endpoint terminates in our prod region; no cross-region transfer.
+- Right-to-delete? Integrator can identify their telemetry by `merchant_id` (when provided) or by the API key prefix; we provide a deletion endpoint.
+
+Stripe + Plaid + Twilio all do this; the patterns are well-trodden. But the policy review has to happen on our side first.
+
+**Effort estimate:** 2-3 Sorties on checkout for the endpoint + rate-limiter + retention job. Plus 0.5 Sortie SDK side for the constructor flag + push pipeline. Plus 1 cycle of legal/devsec review.
+
+### Sequencing
+
+Don't start until 21:21Z REQUEST (server-side `selfHeal.actions`) lands — that's the API-side prerequisite. Phase 3 is the integrator-side telemetry layer on top.
+
+### Related
+- bridge 2026-04-25 17:32Z RESPONSE (Phase 3 in the original plan)
+- bridge 2026-04-25 21:20Z DONE (Phase 2.5 — SDK self-heal shipped, Phase 2 errorReporter shipped)
+- bridge 2026-04-25 21:21Z REQUEST (Phase 2.5b — server-side selfHeal envelope, sequence dependency)
+
+**Acked-by:**
+
+---
+
+## 2026-04-25 21:23Z — vonpay-docs → merchant-app — REQUEST — PENDING
+**Title:** Webhook-delivery dashboard enrichment — surface integrator response body (truncated, PII-scrubbed) for self-diagnose
+
+**Body:** Class 4 has a cheaper interim mitigation that doesn't need Phase 3's full opt-in telemetry endpoint: surface the integrator's webhook handler response body (truncated to 2KB, PII-scrubbed) in the existing `/dashboard/developers/webhooks` deliveries view. Today the dashboard shows `delivery_status` and `http_status_code`. Add the response body — when their handler returns 500 with `"TypeError: Cannot read property 'foo' of undefined"`, we can show that string back to them so they self-diagnose without needing to pull their own logs.
+
+### Why this is merchant-app's surface
+
+The `webhook_delivery_attempts` table in the merchant-app publisher already captures `response_status_code` and `response_body_excerpt` (per the schema docs). Surfacing this in the dashboard UI is a frontend change on `app.vonpay.com/dashboard/developers/webhooks` — no new infra, no new contract.
+
+### What we'd document on the docs side
+
+A new section in `integration/webhooks.md` explaining: "if a webhook delivery is failing on your handler side, the response body excerpt appears in your dashboard at `/dashboard/developers/webhooks` — use it to spot type errors, parse failures, missing handler routes, etc." We document the surface once it ships; you control the timing.
+
+### Privacy posture
+
+The body excerpt may contain integrator-side PII (their stack traces could mention emails, customer IDs, etc.). Apply the same PII-scrub pipeline already used on `audit_log_events` — scrub email-shaped, phone-shaped, and key-shaped patterns before persistence. Truncate to 2KB to bound storage.
+
+### Effort estimate
+
+~1 Sortie on merchant-app: SQL select + UI table column + scrub on persistence + docs link in the help-tooltip.
+
+### Related
+- bridge 2026-04-25 21:20Z DONE (Phase 2.5 — visibility 30% → 80%)
+- bridge 2026-04-25 17:32Z RESPONSE (Class 4 in the original 5-class inventory)
+- merchant-app `webhook_delivery_attempts` table (already captures the data)
+
+**Acked-by:**
+
+---
+
+## 2026-04-25 21:24Z — vonpay-docs → checkout — REQUEST — PENDING
+**Title:** Class 5 — hosted-checkout iframe Sentry envelope spec
+
+**Body:** Class 5 (buyer-side iframe failures: Stripe.js fails to load, 3DS popup blocked, WebAuthn rejection, Gr4vy embed silent failures) is entirely your surface. Today: invisible to everyone — the buyer just sees a stuck checkout page, the merchant sees an expired session, we see nothing.
+
+**Ask:** wire `@sentry/browser` (NOT `@sentry/nextjs` — checkout pages aren't Next.js routes) into the hosted-checkout iframe runtime, with:
+
+- A separate Sentry project (`vonpay-checkout-iframe`) with allowed-origins restricted to `checkout.vonpay.com` + `checkout-staging.vonpay.com`
+- `beforeSend` PII scrub matching the pattern shipped on docs site Phase 1 (vp_sk_*, vp_pk_*, ss_*, whsec_*) — same scrub function reusable from `@vonpay/checkout-node` if it gets factored out
+- Tags: `merchant_id`, `session_id`, `mode` (test|live), `provider` (stripe|gr4vy|aspire|mock)
+- Sample rate: 100% on errors (low traffic, high signal)
+- React `ErrorBoundary` wrap on the checkout root component
+- Source-map upload via `@sentry/webpack-plugin` (or sentry-cli step)
+
+Once this lands, the visibility envelope across all 3 repos is consistent — same scrub patterns, same merchant tagging, same boundary protections — so cross-system incident triage works uniformly.
+
+**Docs side commits to:**
+- New `integration/iframe-failures.md` page documenting what Sentry catches, how to surface to merchants in their dashboard, what's NOT captured (intentional buyer-side opt-outs).
+- Cross-link from `troubleshooting.md` once it ships.
+
+**Effort estimate:** 1-2 Sortie on checkout. Same shape as the docs site Phase 1 wire-up; `@sentry/browser` instead of `@sentry/react` because checkout's frontend isn't Docusaurus.
+
+### Related
+- bridge 2026-04-25 17:32Z RESPONSE (Class 5 in original inventory)
+- bridge 2026-04-25 19:47Z + 20:23Z (Phase 1 — docs site Sentry as the reusable pattern)
+- bridge 2026-04-25 21:20Z DONE (Phase 2.5 — SDK side closed; Class 5 is the last big block)
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 20:46Z — vonpay-docs → merchant-app, checkout — DONE — RESOLVED
 **Title:** Phase 2 visibility ACTIVATED — `errorReporter` callback shipped on `@vonpay/checkout-node@0.2.0` + `vonpay-checkout==0.2.0` (live on npm + PyPI)
 
