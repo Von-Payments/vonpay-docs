@@ -29,19 +29,19 @@ Same starting URL: [app.vonpay.com](https://app.vonpay.com), OTP signup, **Activ
 ### Node.js
 
 ```bash
-npm install @vonpay/checkout-node@0.1.3
+npm install @vonpay/checkout-node@0.3.0
 ```
 
 ### Python
 
 ```bash
-pip install vonpay-checkout==0.1.3
+pip install vonpay-checkout==0.3.0
 ```
 
 ### CLI
 
 ```bash
-npm install -g @vonpay/checkout-cli@0.1.3
+npm install -g @vonpay/checkout-cli@0.3.0
 vonpay checkout login
 ```
 

@@ -19,7 +19,7 @@ Add the following to your Claude Desktop MCP config (`claude_desktop_config.json
   "mcpServers": {
     "vonpay-checkout": {
       "command": "npx",
-      "args": ["-y", "@vonpay/checkout-mcp@0.1.3"],
+      "args": ["-y", "@vonpay/checkout-mcp@0.3.0"],
       "env": {
         "VON_PAY_SECRET_KEY": "vp_sk_test_..."
       }
@@ -37,7 +37,7 @@ Add the same configuration to your Cursor MCP settings (`.cursor/mcp.json`):
   "mcpServers": {
     "vonpay-checkout": {
       "command": "npx",
-      "args": ["-y", "@vonpay/checkout-mcp@0.1.3"],
+      "args": ["-y", "@vonpay/checkout-mcp@0.3.0"],
       "env": {
         "VON_PAY_SECRET_KEY": "vp_sk_test_..."
       }

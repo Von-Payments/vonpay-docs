@@ -5,6 +5,7 @@ const sidebars: SidebarsConfig = {
     'index',
     'quickstart',
     'how-it-works',
+    'troubleshooting',
     {
       type: 'category',
       label: 'Concepts',

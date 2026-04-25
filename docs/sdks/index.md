@@ -4,14 +4,14 @@ sidebar_position: 0
 
 # SDKs & Tools
 
-Von Payments ships client libraries and developer tools for the environments integrators most commonly work in. All 4 packages at `0.1.3` — server SDKs (Node + Python) with 27-code `ErrorCode` union, webhook-payload Buffer/bytes support, and opt-in Stripe-strict `constructEventV2` / `construct_event_v2` that binds the timestamp into the HMAC; CLI + MCP at the same pin. All source-linked to the [Von Payments monorepo](https://github.com/Von-Payments/vonpay).
+Von Payments ships client libraries and developer tools for the environments integrators most commonly work in. All 4 packages at `0.3.0` — server SDKs (Node + Python) with 27-code `ErrorCode` union, programmatic self-heal helpers (`retryable` / `nextAction` / `llmHint` on every error), opt-in `errorReporter` callback for piping into Sentry/Datadog, opt-in Stripe-strict `constructEventV2` / `construct_event_v2`. The CLI ships `vonpay checkout doctor` for one-command diagnostic bundles; the MCP server adds a `diagnose_error` tool for AI agents. All source-linked to the [Von Payments monorepo](https://github.com/Von-Payments/vonpay).
 
 ## Server-side SDKs
 
 | SDK | Install | Reference |
 |---|---|---|
-| **Node / TypeScript** | `npm install @vonpay/checkout-node@0.1.3` | [Node SDK](./node-sdk) |
-| **Python** | `pip install vonpay-checkout==0.1.3` | [Python SDK](./python-sdk) |
+| **Node / TypeScript** | `npm install @vonpay/checkout-node@0.3.0` | [Node SDK](./node-sdk) |
+| **Python** | `pip install vonpay-checkout==0.3.0` | [Python SDK](./python-sdk) |
 
 Both SDKs expose `sessions.create` / `sessions.get` / `sessions.validate`, webhook signature verification, the signed-return-URL `verifyReturnSignature` helper (v2 with `expectedSuccessUrl` / `expectedKeyMode` / `maxAgeSeconds`), typed `VonPayError` with the full `ErrorCode` union, and exponential-backoff retries on 429/5xx.
 
@@ -35,8 +35,8 @@ For languages or runtimes without a first-party SDK, the REST API is the canonic
 
 | Tool | Install | Reference |
 |---|---|---|
-| **CLI** | `npm install -g @vonpay/checkout-cli@0.1.3` | [CLI](./cli) |
-| **MCP server** | `npx -y @vonpay/checkout-mcp@0.1.3` | [MCP server](./mcp) |
+| **CLI** | `npm install -g @vonpay/checkout-cli@0.3.0` | [CLI](./cli) |
+| **MCP server** | `npx -y @vonpay/checkout-mcp@0.3.0` | [MCP server](./mcp) |
 
 The CLI (`vonpay checkout login`, `vonpay checkout sessions create`, `vonpay checkout trigger`, etc.) covers local-development and scripting use-cases. The MCP server exposes the same surface to AI agents via the [Model Context Protocol](https://modelcontextprotocol.io) — see [AI Agents](../integration/ai-agents) for config.
 

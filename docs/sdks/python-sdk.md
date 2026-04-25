@@ -11,7 +11,7 @@ Typed Python client for the Von Payments Checkout API, published as `vonpay-chec
 ## Install
 
 ```bash
-pip install vonpay-checkout==0.2.0
+pip install vonpay-checkout==0.3.0
 ```
 
 Pinning to an exact version is recommended during the pre-1.0 window — minor bumps may add options or change defaults.
