@@ -7,6 +7,44 @@ title: Changelog
 
 What's shipped, in developer-facing terms. For the full monorepo commit log see [github.com/Von-Payments/vonpay](https://github.com/Von-Payments/vonpay).
 
+## 2026-04-25 — SDK 0.3.0 (Phase 2.5 visibility + LLM self-heal)
+
+Pushes integrator visibility from ~30% → ~80% and adds a structured self-heal surface that AI / LLM agents can branch on. All 4 packages bumped to `0.3.0` in lockstep. Closes Phase 2.5 of the visibility plan from bridge `2026-04-25 17:32Z`.
+
+**Backward compatibility:** the additions are opt-in everywhere _except_ the default error logger. Previously, an SDK call that threw without an `errorReporter` was completely silent — now the SDK emits a single `console.warn` (`logging.warning` on Python) on every thrown error with a structured payload. Set `VONPAY_QUIET=1` env var to silence; auto-skipped under `NODE_ENV=test` / pytest. Integrators who pass an explicit reporter override the default behavior unchanged.
+
+**`@vonpay/checkout-node@0.3.0`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-node))
+- **New:** `VonPayError.retryable: boolean` — branch on whether retrying may succeed
+- **New:** `VonPayError.nextAction: NextAction` — programmatic decision-helper, one of `"fix_input" | "rotate_key" | "wait_and_retry" | "contact_support" | "ignore"`
+- **New:** `VonPayError.llmHint: string` — 1-3 sentence LLM-friendly diagnostic synthesized from `code`. Different from `fix` (human-imperative imperative).
+- **New exports:** `ERROR_HELP` (full mapping table), `helpFor(code)` (lookup helper), `ErrorHelp` + `NextAction` types
+- **New default reporter behavior:** `console.warn` with structured payload when no `errorReporter` is configured; silenced via `NODE_ENV=test` or `VONPAY_QUIET=1`. Original error still propagates.
+- 8 new vitest cases (4 self-heal + 4 default-reporter). Test count 55 → **63**.
+
+**`vonpay-checkout==0.3.0`** ([PyPI](https://pypi.org/project/vonpay-checkout/))
+- Mirroring `VonPayError.retryable`, `VonPayError.next_action`, `VonPayError.llm_hint`. Snake-case naming.
+- New exports: `ERROR_HELP`, `help_for`, `ErrorHelp`, `NextAction`.
+- Default reporter logs via `logging.warning` on the `vonpay.checkout` logger when no `error_reporter` is configured. Silenced via `PYTEST_CURRENT_TEST` (auto) or `VONPAY_QUIET=1`.
+- 5 new pytest cases for self-heal helpers. Test count 36 → **41**.
+
+**`@vonpay/checkout-cli@0.3.0`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-cli))
+- **New command:** `vonpay checkout doctor` — diagnostic bundle for support tickets and AI agents.
+  - Captures: runtime (Node, OS, arch, CWD), CLI + SDK versions, env vars present (names only — values never printed), API key prefix (masked — first 4 chars of payload only), live `health()` probe + `sessions.validate` round-trip.
+  - Three output modes: human-readable (default), `--json` (machine-parseable), `--for-llm` (LLM-friendly markdown that agents can paste into Claude / ChatGPT / Cursor and chain on).
+  - PII-safe: API keys and env-var values are NEVER printed; the bundle is safe to paste in public support threads.
+
+**`@vonpay/checkout-mcp@0.3.0`** ([npm](https://www.npmjs.com/package/@vonpay/checkout-mcp))
+- **New MCP tool:** `vonpay_checkout_diagnose_error(code, status?, requestId?)` — given an error code, returns structured help an LLM agent can act on without further prompting. Output includes `code`, `known`, `retryable`, `nextAction`, `llmHint`, `docs`, plus an `agentInstructions` array with branch-table guidance per nextAction.
+- Pure-data; no API call, no state mutation. Safe to call repeatedly.
+- 3 new vitest cases. Tool count 5 → **6**, test count 6 → **9**.
+
+**Docs**
+- New `/troubleshooting` page (this repo) with self-diagnose recipes for the top 10 error codes — `auth_invalid_key`, `auth_key_expired`, `auth_merchant_inactive`, `merchant_not_onboarded`, `webhook_invalid_signature`, `validation_invalid_amount`, `validation_error`, `merchant_not_configured`, `rate_limit_exceeded`, `provider_unavailable`, `provider_charge_failed`, `session_expired`. Structured for both human + AI-agent parse.
+- New "For AI agents" section explaining the three self-heal surfaces: read `err.llmHint` directly, invoke the MCP `diagnose_error` tool, or have the human run `vonpay checkout doctor --for-llm`.
+- Sample SDK pins bumped `^0.2.0` → `^0.3.0`.
+
+---
+
 ## 2026-04-25 — SDK 0.2.0 (Phase 2 visibility — `errorReporter` callback)
 
 Adds an optional `errorReporter` (Node) / `error_reporter` (Python) callback to the SDK constructor so integrators can pipe SDK failures into their own observability stack (Sentry, Datadog, custom logger). **The SDK never phones home** — the callback is invoked synchronously, fire-and-forget. Closes Phase 2 of the visibility plan from bridge `2026-04-25 17:32Z`.
