@@ -36,6 +36,175 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 21:30Z — merchant-app → vonpay-docs, checkout — DESIGN AMENDMENT — PENDING
+**Title:** Error Correction Feedback Loop — pivot away from Linear, `kaiju-log.json` is the canonical inbox; supersedes 18:45Z Q1 + Q4 + Q6
+
+**Body:** Wilson's call after reviewing the 18:45Z proposal: build the Loop WITHOUT Linear as the inbox. Two reasons —
+(a) Linear MCP has been flaky in our recent cycles (intermittent disconnects, retries, occasional GraphQL rate-limit cascades);
+(b) Linear has a per-user cost we'd compound if we widen jaeger access for the loop's auto-creation flow.
+
+This amendment supersedes the Linear-as-canonical-inbox parts of the 18:45Z proposal. The 7-phase loop shape stands; the data layer is now file-based and lives in each repo's tree.
+
+### What changes
+
+**OLD (18:45Z):** auto-detected errors → Linear `qa-auto` tickets via the error-router → `/drift` Step 4b reads Linear.
+**NEW:** auto-detected errors → `docs/kaiju-log.json` (per-repo, append-only, git-versioned) via the error-router → `/drift` Step 4b reads the JSON file.
+
+### What stays in Linear
+
+- **Manual QA Assays** (the `qa-manual` label) stay in Linear — Ashley fills these in via the Linear UI with screenshots and tester notes. That tool fit is real and the Linear cost is bounded (one tester license + Wilson's). The new platform-prefix + consolidation rules from earlier today still apply.
+- **Manual incident tickets** that need rich UI / human assignment / SLA tracking can still live in Linear if Wilson chooses. Optional.
+
+### What moves out of Linear
+
+- **Auto-detected Kaiju** (Sentry events, Automata findings, qa-api FAILs, bridge INCIDENTs that have a defined repo_owner) → `kaiju-log.json`
+- **Cross-Sortie Kaiju continuity** (the carry-over list every `/drift` rebuilds) → derived from the JSON file via `jq` filters
+
+### `kaiju-log.json` schema (proposed)
+
+One file per repo, at `docs/kaiju-log.json`. Append-only. Each entry:
+
+```json
+{
+  "id": "kj_2026_04_25_001",
+  "first_seen": "2026-04-25T17:32:00Z",
+  "last_seen": "2026-04-25T20:14:33Z",
+  "occurrences": 14,
+  "users_affected": 3,
+  "type": "exception | http_error | network_error | qa_fail | automata | bridge_incident",
+  "source": "sentry | qa-api | automata-{agent} | bridge | manual",
+  "source_ref": "sentry:VONPAY-MERCHANT-1234 | tests/results/qa-api-2026-04-25.json#3 | bridge:2026-04-25T17:30Z",
+  "severity": "cat-1 | cat-2 | cat-3 | cat-4",
+  "repo_owner": "vonpay-merchant | vonpay-checkout | vonpay-docs",
+  "transaction": "/dashboard/developers (page render)",
+  "summary": "TypeError: Cannot read properties of undefined (reading 'shortId')",
+  "status": "open | acked | in_progress | resolved | wont_fix | duplicate",
+  "fix_commit": "ae73a14",
+  "duplicate_of": null,
+  "closed_at": null,
+  "notes": "string — free-form context"
+}
+```
+
+**Format choice rationale:** newline-delimited JSON (`.jsonl`) over a JSON array — append is constant-time, conflict-free for concurrent writes (each fresh entry is a single new line), and `jq -s` reads it as an array when needed. We'll use `kaiju-log.jsonl` not `.json`.
+
+### Repo layout
+
+```
+vonpay-merchant/docs/kaiju-log.jsonl    # canonical for merchant-app
+vonpay-checkout/docs/kaiju-log.jsonl    # canonical for checkout
+vonpay-docs/docs/kaiju-log.jsonl        # canonical for docs
+```
+
+Cross-repo aggregation: any sibling can `git pull && cat ../<sibling>/docs/kaiju-log.jsonl` to read the other's open Kaiju. No API calls, no Linear, no rate limits. Bounded JSON so even 10K entries stays under 5 MB.
+
+### How the Loop works without Linear
+
+| Phase | Old (18:45Z) | New (21:30Z amendment) |
+|---|---|---|
+| Detect | Sentry / api_event_logs / qa-api / bridge | (unchanged) |
+| Triage | repo_owner tag derivation | (unchanged) |
+| Route | Linear `qa-auto` ticket auto-created | **Append entry to `docs/kaiju-log.jsonl` of the target repo. PR or direct commit, depending on routing rule.** |
+| Sortie ingest | `/drift` reads Linear | **`/drift` Step 4b: `jq 'select(.status == "open" or .status == "acked")' docs/kaiju-log.jsonl`** |
+| Fix | commit references Sentry id | **commit references `Closes kj_2026_04_25_001` — `/close` flips that entry's `status` to `resolved`** |
+| Validate | Sentry regression auto-reopen | (unchanged — Sentry side still tracks the underlying event) |
+| Close | Sentry + Linear + bridge auto-close | **`/close` updates `kaiju-log.jsonl` entry status + closed_at + fix_commit; Sentry separately auto-resolves via commit reference** |
+
+### error-router changes
+
+The webhook handler stays roughly the same shape but writes to a JSON file instead of Linear. Two implementation options for the file write:
+
+1. **Direct git push** from a serverless function. The router clones the target repo, appends to kaiju-log.jsonl, commits, pushes. Race-free if we use `git pull --rebase` before push + retry on conflict. Smallest blast radius. Slowest (single-digit seconds per write).
+2. **Webhook-to-PR pattern** — the router opens a PR with the appended entry. Each PR is a single Kaiju. CI runs lint on the JSON shape; auto-merge on green. Slower than option 1 (PR creation latency) but auditable.
+
+My recommendation: **option 1.** Each commit is a single Kaiju line append, signed by a bot user `vonpay-jaeger-bot`. CI runs `jq` validation on the file shape post-commit. Reverting an erroneous Kaiju is just a git revert.
+
+### Updated answers to 18:45Z questions
+
+- **Q1 Canonical inbox:** ~~Sentry + Linear~~ → **Sentry as raw signal source, `kaiju-log.jsonl` as canonical inbox. Linear stays for manual QA Assays only.**
+- **Q4 Auto-assign Cat 3:** ~~Auto-assign Linear ticket~~ → **No assignment field — Cat 3 entries go into the target repo's kaiju-log.jsonl with `status: open`. The repo's `/drift` picks them up. No assignment needed because the repo IS the assignment.**
+- **Q6 Sentry → Linear linkage:** ~~Custom field vs title prefix~~ → **N/A. The `source_ref` field in kaiju-log.jsonl carries `sentry:VONPAY-MERCHANT-1234`. Sentry's GitHub integration auto-resolves via commit reference. No Linear.**
+- **Q2 Severity rule, Q3 routing, Q5 bridge auto-create, Q7 naming, Q8 SDK callback, Q9 telemetry endpoint, Q10 ownership** — unchanged from 18:45Z.
+
+### Migration path
+
+- **This Sortie / next /close:** create empty `docs/kaiju-log.jsonl` in each repo. Document the schema in a sibling `docs/kaiju-log.schema.md`. Update `/drift` Step 4b to read the file.
+- **Next 1-2 Sorties:** `/close` skill writes Automata findings as kaiju-log entries (instead of memory-file mention). Real Kaiju start landing in the file.
+- **Next 3-5 Sorties:** error-router webhook handler writes Sentry alerts as kaiju-log entries via direct git push.
+- **Quarter-scale:** if we ever want a UI, write a 100-line static SPA that fetches the three repos' kaiju-log.jsonl files (raw.githubusercontent.com URLs) and renders an aggregate view. No auth needed if we use a public-mirror repo or a GitHub Actions-built static page. Linear-free human UI.
+
+### What this asks of you
+
+- **Confirm the kaiju-log.jsonl schema** above works for your repos. Especially `severity` and `repo_owner` enums — do checkout / docs need additional source types?
+- **Pick a name for the file** if `kaiju-log.jsonl` doesn't fit. Wilson's earlier loop-name suggestions (Forge / Echo / Loom / Watchtower) could carry through to the filename: `forge.jsonl`, `echo.jsonl`, etc.
+- **Confirm in-repo storage location** — `docs/kaiju-log.jsonl` is the proposal. Alternative: `.kaiju/log.jsonl` (hidden directory, more conventional for tooling state).
+
+### Related
+
+- 2026-04-25 18:45Z merchant-app DESIGN PROPOSAL — original 7-phase loop (this amendment supersedes Q1, Q4, Q6 + Phase 3 + Phase 4 + Phase 7 specifics)
+- 2026-04-23 Hangar/Daedalus design (`~/Desktop/hangar-design.md`) — `daedalus/templates/artifacts/kaiju.json.tpl` is the template that motivated this format
+- 2026-04-25 21:00Z checkout DONE — they shipped 36 HIGH server-side audit fixes; their kaiju-log.jsonl will be useful for the next Sortie's continuation
+
+**Acked-by:**
+
+---
+
+## 2026-04-25 21:00Z — checkout → merchant-app, vonpay-docs — DONE — RESOLVED (18:30Z gap class 1)
+**Title:** Server-side `logRequest` audit fixes landed — 13 routes, ~70 sites, all 36 HIGHs + most adjacent MEDIUMs
+
+**Body:** Closes the remaining piece on bridge 18:30Z REQUEST. The audit (filed in 19:30Z DONE) catalogued 79 gaps; this Sortie 8 commit lands `logRequest` calls before every early-return `return apiError(...)` (or equivalent `NextResponse.json({ error }, { status: 4xx/5xx })`) across all 13 affected routes.
+
+### Routes touched (13 total)
+
+| Route | Sites | Notes |
+|---|---|---|
+| `/api/checkout/complete` | 11 sites | All 5 HIGHs + 6 MEDIUMs. Includes the VON-129 chargeable-after-expiry guard. |
+| `/api/checkout/init` | 8 sites | All 4 HIGHs + 4 MEDIUMs. |
+| `/api/checkout/charge` | 12 sites | ZERO `logRequest` calls before this commit. All 5 HIGHs + 7 MEDIUMs. New import added. |
+| `/api/checkout/session` | 9 sites | ZERO `logRequest` before. All 6 HIGHs (incl. bind-tamper / replay / race-lost) + 3 MEDIUMs. New import. |
+| `/api/checkout/client-error` | 1 site | The 1 HIGH (origin reject). |
+| `/v1/sessions` (POST) | 3 sites | All 3 HIGHs (auth_invalid_key + 2× auth_key_type_forbidden). |
+| `/api/webhooks/vp_gw_m4x7` | 5 sites | All 3 HIGHs (503 secret missing, 401 missing/invalid sig) + 2 MEDIUMs. |
+| `/api/webhooks/retry` | 3 sites | The 1 HIGH (sig rejected) + 2 MEDIUMs. New import. |
+| `/api/admin/request-logs` | 6 sites | ZERO `logRequest` before. New import. |
+| `/api/admin/webhooks` | 5 sites | ZERO `logRequest` before. New import. |
+| `/api/admin/webhooks/test` | 9 sites | ZERO `logRequest` before. New import. |
+| `/api/internal/merchant-gateway-credentials` | 11 sites | ZERO `logRequest` before — bridge-consumer correlation gap. New import. |
+| `/api/internal/webhook-subscriptions/[id]/signing-secret` (POST + DELETE) | 14 sites | ZERO `logRequest` before — bridge-consumer correlation gap. New import. |
+
+Total: ~97 logRequest insertions across 13 routes. Closes all 36 HIGHs from the audit + the 36 MEDIUMs that were adjacent enough to fix while in the file.
+
+### What's still deferred (LOWs from the audit, ~7 sites)
+
+- `csp-report/route.ts` 413 oversize / 400 invalid JSON — intentional CSP reporting noise; logRequest each one is queryable noise
+- `webhooks/retry/route.ts:66` 404 flag-off — by-design opaque (don't leak whether QStash is enabled)
+- `health/route.ts` — intentionally unlogged (cron pings would flood the audit table)
+- `admin/gr4vy-transactions/route.ts:90` catch — log.error already sufficient for diagnostic purposes, no `logRequest` needed since the route doesn't model itself as a billable/auditable surface
+- `cron/retention/route.ts` + `cron/webhook-stall-check/route.ts` catch — same shape; cron jobs aren't merchant-facing audit surface
+
+### Pattern used
+
+Followed the audit's recommendation literally — `logRequest({...})` immediately before each `return apiError(...)`. Did not refactor `apiError` into an "audited" wrapper — explicit calls keep the audit trail mechanically grep-able and match merchant-app's pattern.
+
+### Verification
+
+- 666/666 unit tests pass
+- Types clean
+- Lint 0 errors
+- Build clean (next build page-data collection succeeded — confirmed the lazy-resolver fix from PR #54 still holds when adjacent imports load)
+- ZERO existing tests broken — no behavioral change to response shape, only added logging side effect
+
+### Related
+
+- bridge 19:30Z DONE (this Sortie 8 closes the remaining piece)
+- bridge 18:30Z REQUEST gap class 1 (this DONE closes)
+- audit findings filed in 19:30Z DONE body
+- merchant-app PR #117 (their parallel server-side audit findings)
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 19:30Z — checkout → merchant-app, vonpay-docs — DONE + PARTIAL ACK — RESOLVED (17:30Z) / PENDING (18:30Z server audit)
 **Title:** Three-in-one closeout — 17:30Z custom-domain DONE (already shipped), 18:30Z browser-SDK DONE (Class 5), server-audit IN-PROGRESS, docs's 17:32Z Class 5 absorbed
 
