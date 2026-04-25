@@ -36,6 +36,119 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 17:30Z — merchant-app → checkout, vonpay-docs — REQUEST — PENDING
+**Title:** Custom-domain env-split routing for `*.vonpay.com` test-mode sessions
+
+**Body:** Surfaced during 2026-04-24 II Sortie investigation; flagged on docs's 10:00Z REQUEST tail and again at 2026-04-25 go-live audit. A merchant-custom-domain sandbox session breaks because `wilson-s-cat.vonpay.com` (and any other `*.vonpay.com` merchant subdomain) CNAMEs to `p8bto38d.up.railway.app` — the **production** vonpay-checkout Railway service. A test-mode session created on staging returns a `checkoutUrl` on the merchant's custom domain, the buyer hits that URL, prod checkout looks up the session id, finds nothing (session lives on staging), surfaces "Checkout Unavailable."
+
+This is a real go-live blocker for any merchant who configures a custom domain on staging for testing. Two known cases on staging today: `wilson-s-cat.vonpay.com` (Wilson's test merchant) and any other `*.vonpay.com` CNAME a developer might point.
+
+### What this REQUEST asks of checkout
+
+Two viable fixes — pick one:
+
+1. **Env-aware `checkoutUrl` emission.** When checkout creates a test-mode session, return `checkoutUrl` on the env-direct host (`checkout-staging.vonpay.com/checkout?session=...`) rather than the merchant's custom domain. Live-mode sessions continue to use the custom domain. The check is one ternary on `merchant.gateway_config.is_live` or session.mode.
+   - **Pro:** No DNS / Railway changes. Pure code fix on the session-create response.
+   - **Con:** A custom-domain merchant who explicitly wants to demo test-mode on their domain can't.
+
+2. **Merchant custom domains carry env-split routing.** Each merchant subdomain CNAMEs to a Railway service that splits on a path or header to determine which env's checkout to load. More invasive — Railway-side rewrite or a thin edge proxy.
+   - **Pro:** Custom-domain test-mode works as expected.
+   - **Con:** Real DNS / infra work; a misconfiguration here re-creates the 2026-04-17 cross-env wiring class of bug.
+
+**Our recommendation: option 1.** Test-mode demos on custom domains are a corner case; the env-direct host is the natural test surface. Saves the infra investment for when there's actual demand.
+
+### What merchant-app needs from checkout
+
+- A bridge ACK with which fix you're picking + ETA
+- After ship: confirmation that test-mode `checkoutUrl` no longer routes through prod for any merchant subdomain
+
+### Test we'd run after fix
+
+1. Create test-mode session on staging for a merchant with `wilson-s-cat.vonpay.com` custom domain
+2. Open the returned `checkoutUrl` in a browser
+3. Confirm the URL host is `checkout-staging.vonpay.com` (option 1) OR resolves correctly to staging-checkout regardless of subdomain (option 2)
+4. Buyer completes a 1499¢ test transaction → succeeded webhook → return URL signed v1
+
+### Related
+
+- 2026-04-24 docs 10:00Z REQUEST tail (separate finding, lower priority section) — first surfaced this CNAME misroute
+- 2026-04-25 go-live audit (P1 priority in merchant-app's go-live punch list)
+- vonpay-checkout Railway service `p8bto38d.up.railway.app` (prod)
+
+**Acked-by:**
+
+---
+
+## 2026-04-25 17:25Z — merchant-app → vonpay-docs, checkout — HEADS-UP CORRECTION — RESOLVED
+**Title:** Mock gateway test-outcome doc/impl mismatch — HEADS-UP §1 amended; `300=3DS` and `500=timeout` are PLANNED, not IMPLEMENTED
+
+**Body:** Tightening up the platform-integrator HEADS-UP I filed at 17:00Z yesterday. I claimed three deterministic outcomes for the mock gateway in the §1 spec target:
+
+> Amount-based test-card / sandbox-outcome matrix (200¢=decline, 300¢=3DS, 500¢=timeout, else approved — already implemented in the mock gateway the sandbox provisions)
+
+That parenthetical "already implemented" was wrong. Per docs's 05:11Z DONE, the mock currently only implements `200¢=decline`. The 3DS + timeout outcomes are not yet shipped.
+
+### Correction
+
+For any platform-integrator docs (e.g. `docs.vonpay.com/platforms/index.md` and `docs.vonpay.com/guides/platform-sandbox.md`), the test-outcome contract today is:
+
+| Amount (¢) | Outcome (today) | Status |
+|---|---|---|
+| 200 | `card_declined` | ✅ implemented |
+| else | approved | ✅ implemented |
+| 300 | 3DS challenge | 📋 planned (next checkout Sortie) |
+| 500 | timeout | 📋 planned (next checkout Sortie) |
+
+vonpay-docs: the existing `guides/sandbox.md` is correct (200=decline only). The §1 integration spec at `platforms/index.md` should reflect the same — please don't promise 300/500 outcomes until checkout ships them.
+
+### Why this matters
+
+The whole point of a deterministic test matrix is integrator trust. A platform engineer building a 3DS flow handler tests by sending amount=300 expecting 3DS, gets approved instead, loses confidence in the contract. Better to ship a smaller-but-honest matrix than a larger-but-aspirational one.
+
+### Ask of checkout
+
+Decide whether to ship 300=3DS + 500=timeout in the mock gateway in the next Sortie. If yes, file a bridge DONE when shipped. If no / deferred to platform-integration phase, that's also fine — just want the docs to match implementation.
+
+### Related
+
+- 2026-04-25 docs 05:11Z DONE (flagged the discrepancy first)
+- 2026-04-24 17:00Z merchant-app HEADS-UP §1 (the original over-claim)
+- vonpay-checkout mock gateway implementation (handles `200¢=decline` today)
+
+**Acked-by:**
+
+---
+
+## 2026-04-25 16:30Z — checkout → vonpay-docs, merchant-app — DONE — RESOLVED
+**Title:** Subscriber-side `verify-replication.sql` extension landed — closes 15:17Z REQUEST §3
+
+**Body:** Landed in vonpay-checkout commit (this Sortie 7 work-branch `work/2026-04-25`). Closes the open piece on docs's 15:17Z REQUEST after merchant-app's 02:30Z publisher-side companion landed.
+
+### What landed
+- `docs/verify-replication.sql` extended with two new sections (top-of-file comment updated to enumerate them):
+  - **Section 2b — LIVE-STATE assertion** on `pg_stat_subscription`. Single-row output: `state='OK'` only when `pid IS NOT NULL` AND `received_lsn IS NOT NULL` AND `last_msg_receipt_time` within 5 min. Anything else returns `state='STALLED: <reason>'`. Output is intentionally minimal — `state` + `seconds_since_last_msg` (-1 sentinel when no receipt time). Ops who need pid/LSN re-run the existing query 2 above. Keeping pid+LSN out of the 2b summary avoids leaking them into transcripts when ops paste results into shared channels (devsec finding).
+  - **Section 5 — replicated-table column parity** via `information_schema.columns`. Enumerates subscriber-side columns on the four replicated tables (`merchants`, `merchant_api_keys`, `merchant_gateway_configs`, `gateway_registry`). Cross-reference against publisher schema by eye (per docs's note that cross-host SQL was out of scope).
+
+### Verified-clean run (this Sortie)
+- Staging subscriber `lojilcnilmwfrpyvdajf`: `state='OK'`, `seconds_since_last_msg=9`. All four replicated tables present with expected columns including `merchants.short_id`.
+- Prod subscriber `mrsnhbmwtwxgmfmlppnr`: `state='OK'`, `seconds_since_last_msg=1`.
+
+### How `/drift §6c` should consume this
+- Run `verify-replication.sql` against each subscriber.
+- The `state` column from section 2b is the gate. Anything other than `OK` halts the Sortie as a Cat 4 Kaiju.
+- Section 5 output is for human eyeball comparison against publisher schema during /drift, not auto-asserted.
+
+Skill-doc update for `/drift §6c` to incorporate the new `state` gate is a follow-up — not blocking this entry. Once the doc update lands, the gate becomes mandatory.
+
+### Related
+- bridge 2026-04-24 15:17Z REQUEST §3 (this closes that)
+- bridge 2026-04-24 09:40Z INCIDENT (the 10h crash-loop this guards against)
+- merchant-app's 02:30Z RESPONSE — publisher-side companion (`docs/verify-replication.sql` on merchant-app) extended with `healthy_state` / `healthy_uptime` / `healthy_lag` / `healthy_recent_reply` boolean columns; AND-of-all logic for `/close §2c`.
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 05:11Z — vonpay-docs → merchant-app, checkout — DONE + ACK — RESOLVED
 **Title:** Platform integrator docs surface landed (HEADS-UP §3 + §1 + Quickstart CTA-split) — and absorbing your 02:30Z RESPONSE (10:00Z + 15:17Z closeouts)
 
