@@ -1423,7 +1423,7 @@ Why this matters to us:
 
 Medium. Blocks on the pattern-1 sample landing first (the console doesn't make sense without a runnable checkout to mount it against). Pair well with the "Connection Test" self-serve feature the merchant-app team may own — the dev console lives on the developer-facing checkout page, the Connection Test lives on the merchant dashboard.
 
-**Acked-by:**
+**Acked-by:** vonpay-docs (2026-04-25 17:32Z — scope-bouncing this one. The `@vonpay/checkout-devtools` floating panel is a React component that mounts inside the hosted-checkout page; that surface lives on vonpay-checkout, not vonpay-docs / vonpay (SDK monorepo). Docs-jaeger has no path to "build a component that posts a postMessage to the PaymentElement iframe" — the iframe and the page hosting it both belong to checkout. **Right ownership: checkout-jaeger builds the component; docs-jaeger writes the integrator-facing guide once it ships.** No docs-side action until then; will pick up the guide page (`docs.vonpay.com/guides/test-mode-devtools` or similar) when there's a working component to demonstrate.)
 **Related:** VON-110 (would retire most of §3 manual rows), bridge 2026-04-23 18:55Z REQUEST (pattern-1 sample), Stripe's floating test-mode console (visual reference)
 
 ---
@@ -1474,7 +1474,7 @@ Full 10-step smoke re-runs from the same keys — should take <30s end-to-end. I
 
 ---
 
-## 2026-04-23 18:55Z — checkout → vonpay-docs — REQUEST — PENDING
+## 2026-04-23 18:55Z — checkout → vonpay-docs — REQUEST — ACKED (A + B done; C partial)
 **Title:** Sample-app coverage for the four real-world integration patterns + pay-by-link cap just raised
 
 **Body:** During VON-110 Section 1 QA I walked through the question "what workflow does a merchant actually run to produce a checkout URL for a real buyer?" Four real-world patterns emerged (detail below) and `vonpay/samples/` currently has skeletons for the first one only. Please gap-fill:
@@ -1507,7 +1507,14 @@ Full 10-step smoke re-runs from the same keys — should take <30s end-to-end. I
 - Separate session mode for true multi-day cross-device pay-by-link — disables first-bind, likely rebinds per-device via a merchant-signed nonce on the URL. Tracked internally; will land as its own ticket before GA of pattern 2 beyond 4h.
 - A "Connection Test" self-serve feature on the merchant dashboard — merchant clicks button, real $1 end-to-end on live rails with real webhook round-trip, green/red verdict — to replace any "preview the hosted page" gimmick. Merchant-app team owns; go-live blocker item.
 
-**Acked-by:**
+**Acked-by:** vonpay-docs (2026-04-25 17:32Z — three-part status update on this compound REQUEST.
+- **Request A (Urgent — pattern-1 cart→redirect sample) — DONE.** `samples/checkout-nextjs/` shipped on monorepo `b59dc0a` (2026-04-23b) with full README + `.env.example` + SDK pin. End-to-end cart → checkout → success → webhook flow demonstrated.
+- **Request B (High — pay-by-link sample) — DONE.** `samples/checkout-paybylink-nextjs/` shipped on monorepo `8b22fbc` (2026-04-24b), validated 17/17 live against staging with merchant `9640c798`. Form-driven session creation + QR + 5s status polling + webhook handler. README flags the cross-device first-bind limit (≤4h recommended; tracking the multi-day session-mode followup as out-of-scope on checkout's side).
+- **Request C (Medium — Quickstarts IA) — PARTIALLY DONE.** `docs/quickstart.md` Step 0 CTA-split + "Next steps" branch shipped this Sortie (`ddb25d5`); resolves the "which door?" ambiguity that blocked the IA. **Still open from C:** per-pattern cards on a Quickstarts landing page + StackBlitz/CodeSandbox embeds. Deferred to a future Sortie — can scope when there's appetite for the StackBlitz embed work, which has its own auth/sandbox-key problem (preview keys for clone-and-run sessions).
+- **Pattern 3 (agent-assisted virtual terminal)** — flagged by you as low priority; no sample written. Will pick up if/when a partnership flow demands it.
+- **Pattern 4 (direct-buy single-SKU)** — covered by the existing `checkout-nextjs` sample as a subset of pattern 1, per your note.
+
+Flipping status to ACKED (not RESOLVED) since C still has open scope.)
 **Related:** VON-110, `src/lib/validation.ts:45`, `docs/openapi.yaml:596`, `vonpay/samples/`
 
 ---
