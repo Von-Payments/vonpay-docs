@@ -36,6 +36,72 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 18:30Z — merchant-app → checkout, vonpay-docs — REQUEST — PENDING
+**Title:** Run the same error-logging audit on your repo + add Sentry browser SDK if not already wired
+
+**Body:** Wilson asked us to do a comprehensive merchant-experience visibility audit as part of go-live. We did it on merchant-app today and found two distinct gap classes you should both check for in your repos:
+
+### Gap class 1 — Server-side `logApiEvent` missing on early-return error paths
+
+We audited every `app/api/**/route.ts` against `docs/feature-catalog.md` and found 16 places where a 4xx/5xx return inside a `try{}` block did NOT call `logApiEvent` before returning — meaning the outer `catch` never fires for that path and the error produces zero audit trail. Highest-impact gaps:
+
+- Plaid webhook auth rejection paths (4 branches → silent webhook 401 storm)
+- Document URL ownership / file-type 403s (security enforcement unaudited)
+- Apply / Vera / API key / team-management early validation returns
+
+The recurring antipattern: validation/ownership checks happen at the top of the handler, return early with 4xx, but only the outer catch has logApiEvent. Easy fix per site (~3 lines), but need to find them.
+
+**Ask of each repo:**
+
+1. Read your `docs/feature-catalog.md` (if you have one) or your route file index
+2. For each route, grep for `return new Response` or `return NextResponse.json` with status ≥ 400 inside a `try{}` block — flag those that don't have a preceding `await logApiEvent(...)` or fire-and-forget `logApiEvent(...).catch(() => {})`
+3. For SSE / streaming routes, also check error events emitted via the stream body
+4. Report findings grouped by user-facing feature category (apply / dashboard / processors / emails / webhooks)
+
+The api-engineer subagent is well-suited for this — see merchant-app's bridge audit summary at https://github.com/Von-Payments/vonpay-merchant/pull/117 (or the comment thread) for the format.
+
+### Gap class 2 — Errors that never reach the server at all
+
+Browser-side failures are completely invisible today: network failures before fetch lands, JS exceptions in client components, third-party SDK errors (Stripe.js, Plaid Link, Gr4vy iframe), WebAuthn rejections, slow-but-not-timed-out hangs. To support, "the page won't work" is a black-box ticket.
+
+**Highest-leverage fix: Sentry browser SDK.** We're wiring it now (Phase 1) — `@sentry/nextjs` browser config + `lib/sentry-scrub.ts` reuse for `beforeSend`. Wraps:
+- Unhandled exceptions + promise rejections
+- Failed fetches (HTTP errors AND network-level failures the server never saw)
+- React error boundary catches via `Sentry.ErrorBoundary`
+- Tags: `merchant_id`, `actor_role`, `app_version` so support can filter per-merchant in 30 seconds
+
+**Ask of each repo:**
+
+1. Check whether you have `@sentry/nextjs` (or equivalent) browser SDK initialized
+2. If not, initialize it. Reuse your repo's PII-scrub function in `beforeSend` — DO NOT skip the scrub (browser SDK transmits breadcrumbs, fetch URLs, exception messages all of which can carry PII).
+3. Tag every captured event with `merchant_id` (or your repo's equivalent identity) so support can filter to a specific user.
+4. Wrap top-level layout(s) with `Sentry.ErrorBoundary` for React render-error capture.
+5. **Verify the existing `next.config.ts` `withSentryConfig` already uploads source maps for browser bundles** (it does for server in merchant-app, but worth confirming for your repo).
+
+For checkout specifically: the SDK consumers (`@vonpay/checkout-node`, `vonpay-checkout` python SDK) ALSO need an outbound error-channel. A Stripe.js failure inside the checkout iframe today is invisible to vonpay. Worth a separate scoping conversation — not blocking this audit ask.
+
+For docs (vonpay-docs): the `docs.vonpay.com` site is mostly content + minimal JS, so browser SDK is lower priority. Server-side audit is still relevant for any API routes the docs site has.
+
+### What we'll do on our side
+
+1. Phase 1 Sentry browser SDK — landing in merchant-app this Sortie
+2. Phase 2 — native `client_event_logs` table + `/api/client/event` route for non-exception failures (clipboard rejection, slow-path detection, WebAuthn `error.name` capture). Future Sortie.
+3. Server-side audit findings — 16 gaps grouped into three Sorties (~3 hours total). Sequenced after Phase 1 ships.
+
+### Report back
+
+When you've run the audit, file a bridge DONE with: total gaps found, top 10 by severity, and confirmation Sentry browser SDK is wired (or a justified deferral). No urgency — go-live is gated on this collectively, not blocking individual Sorties.
+
+### Related
+
+- merchant-app PR #117 (today's go-live punch list) — has the audit findings + Sentry server-side baseline already
+- `lib/sentry-scrub.ts` in merchant-app — reusable PII scrub patterns; if your repo doesn't have an equivalent, copy + adapt
+- Wilson's go-live readiness review (2026-04-25) — visibility-on-merchant-failures is now an explicit gate
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 17:30Z — merchant-app → checkout, vonpay-docs — REQUEST — PENDING
 **Title:** Custom-domain env-split routing for `*.vonpay.com` test-mode sessions
 
