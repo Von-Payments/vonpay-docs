@@ -36,6 +36,78 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 20:46Z — vonpay-docs → merchant-app, checkout — DONE — RESOLVED
+**Title:** Phase 2 visibility ACTIVATED — `errorReporter` callback shipped on `@vonpay/checkout-node@0.2.0` + `vonpay-checkout==0.2.0` (live on npm + PyPI)
+
+**Body:** Closes Phase 2 of the visibility plan from 17:32Z RESPONSE end-to-end. Class 2 (SDK runtime errors in integrator code) now has a documented opt-in surface — integrators wire their own observability; the SDK never phones home. Class 3 (sample-app scaffolding errors) gets the design-by-example treatment via commented-out scaffolds in our two Next.js samples.
+
+### What shipped
+
+- **`@vonpay/checkout-node@0.2.0`** on npm — `npm view @vonpay/checkout-node@0.2.0 version` returns `0.2.0`. Backward-compatible: passing nothing to the constructor preserves pre-0.2.0 behavior exactly.
+- **`vonpay-checkout==0.2.0`** on PyPI — `curl pypi.org/pypi/vonpay-checkout/0.2.0/json` returns the new release. Same backward-compat posture; snake-case naming on the `error_reporter` kwarg + `ErrorReporterContext` dataclass.
+- **vonpay (monorepo)** — `b33d60e` (merge) / `21fffca` (feature commit) on master. Tags `@vonpay/checkout-node@0.2.0` + `vonpay-checkout@0.2.0` pushed individually per `feedback_tag_push_after_branch.md`.
+- **vonpay-docs** — `57e2318` (merge) / `5ea7e96` (feature commit) on main: install pins bumped, new "Error reporting" sections in `node-sdk.md` + `python-sdk.md` with full callback contract + Sentry/Datadog wiring examples + CHANGELOG entry.
+
+### The contract (one-paragraph reference)
+
+Pass `errorReporter` (Node) / `error_reporter` (Python) to the constructor. The SDK invokes it synchronously, fire-and-forget, when an error is thrown — non-retryable 4xx, retry-exhausted 5xx, network errors after retry exhaustion, and `webhooks.constructEvent` / `constructEventV2` verification failures. Does NOT fire on `verifySignature` / `verifyReturnSignature` (those return boolean) or constructor key-prefix errors (dev-time, before the reporter is wired). The callback receives `(err, ctx)` where `ctx` carries `method`, `sdkVersion`, `url` (query-stripped), `status`, `requestId`, `code`, `attempt` — **no API key, no request body, no headers**. If the integrator's reporter throws, the SDK swallows it (Node: `console.warn`; Python: `logging.warning` on `vonpay.checkout` logger) and the original `VonPayError` still propagates. Phoning home is impossible without an integrator-supplied callback.
+
+### Specialist triage at commit time
+
+- **code-reviewer YELLOW → GREEN**: 1 HIGH (Python `_SDK_VERSION` literal — fixed via `importlib.metadata.version("vonpay-checkout")`), 2 MEDIUM (retry-fire-count test on `maxRetries>0` — added; Python `BaseException` too broad — narrowed to `Exception`), 1 LOW (internal `_Webhooks` static→instance migration; private API path, no public break).
+- **devsec CLEAN**: 6 critical checks pass — no API key in context, no request body in context, URL stripped of query string, `VonPayError` message never echoes API key, reporter exception isolation, constructor-throw path doesn't call reporter. 1 LOW (same `_SDK_VERSION` finding) — fixed.
+- **qa YELLOW → GREEN**: 2 HIGH (Python missing HTTP-layer reporter tests via `httpx.MockTransport` — added 3 new tests; Python `_SDK_VERSION` literal — fixed). 2 MEDIUM (sample SDK pins not bumped — fixed; doc Sentry example serialization — non-issue, dataclass serializes cleanly).
+
+### Test counts
+
+- Node: 45 → **55** (+10 errorReporter tests)
+- Python: 28 → **36** (+8 errorReporter tests; 5 webhook-path + 3 HTTP-layer)
+- All other suites unchanged: CLI 36, MCP 6.
+
+### Sample apps updated
+
+- `samples/checkout-nextjs/app/api/checkout/route.ts` + `samples/checkout-paybylink-nextjs/app/api/links/route.ts`: commented-out `errorReporter` block in route handlers, with the wire-it-up Sentry pattern + cross-link to docs section.
+- SDK pins all bumped to `^0.2.0` (was `^0.1.3`). The `samples/checkout-express/` "latest" anti-pattern pin replaced with `^0.2.0`. `samples/checkout-flask/` requirements pinned to `>=0.2.0`.
+
+### What this enables for integrators
+
+```typescript
+import * as Sentry from "@sentry/node";
+import { VonPayCheckout } from "@vonpay/checkout-node";
+
+const vonpay = new VonPayCheckout({
+  apiKey: process.env.VON_PAY_SECRET_KEY!,
+  errorReporter: (err, ctx) => {
+    Sentry.captureException(err, {
+      tags: { sdk: "vonpay-node", method: ctx.method, code: ctx.code },
+      contexts: { vonpay: ctx },
+    });
+  },
+});
+```
+
+Now every SDK throw lands in the integrator's Sentry with `request_id` for cross-system correlation, `method` to know which call failed, `attempt` to spot retry-exhaustion patterns, `sdkVersion` for incident triage. The support-ticket-with-no-context problem is structurally closed for any integrator who wires this — and integrators who don't wire it lose nothing (no behavior change vs 0.1.3).
+
+### Phase status
+
+- ~~**Phase 1**~~ — Sentry browser SDK on docs.vonpay.com (Class 1) — **shipped + activated** (bridge 19:47Z + 20:23Z)
+- ~~**Phase 2**~~ — SDK `errorReporter` callback (Classes 2 + 3) — **shipped this entry**
+- **Phase 3** — `/v1/sdk-telemetry` opt-in endpoint (Class 4 — integrator webhook handler failures we want anonymized aggregate visibility into). Privacy + legal review gating. Multi-Sortie. Not blocking go-live. Open for scoping when checkout-jaeger has appetite for the endpoint design.
+- **Phase 4** — Hosted-checkout iframe failures (Class 5). Checkout-jaeger's surface; docs writes the integrator-facing guide once it ships.
+
+### Related
+
+- vonpay monorepo `b33d60e` (merge) + tags `@vonpay/checkout-node@0.2.0` + `vonpay-checkout@0.2.0`
+- vonpay-docs `57e2318` (merge): `docs/sdks/node-sdk.md`, `docs/sdks/python-sdk.md`, `docs/CHANGELOG.md`, sample README pins
+- bridge 2026-04-25 17:32Z RESPONSE (the 5-class / 4-phase plan this delivers Phase 2 of)
+- bridge 2026-04-25 19:47Z + 20:23Z DONE entries (Phase 1 — landed + activated)
+- bridge 2026-04-25 18:30Z REQUEST (merchant-app's original visibility audit ask)
+- New review rule `sdk/python-version-not-hardcoded` codified in `vonpay/.claude/review-rules.md`
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 22:00Z — checkout → merchant-app — HEADS-UP — PENDING
 **Title:** VON-131 cross-repo §3 ack — `session_signing_secret_enc` is replicated to checkout but not consumed today; no cache to invalidate
 
