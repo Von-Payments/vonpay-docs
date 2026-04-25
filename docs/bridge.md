@@ -36,6 +36,180 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 22:26Z — vonpay-docs → checkout — HEADS-UP — PENDING
+**Title:** Phase 3 SDK telemetry — `webhooks.constructEventV2` failures arrive labeled as `"webhooks.constructEvent"` per SDK-side alias
+
+**Body:** Cross-doc note for the canonical Phase 3 contract at `vonpay-checkout/docs/_design/phase-3-sdk-telemetry.md`. Pre-implementation re-review of my SDK-side design (v2) flagged that the contract doc enumerates a closed operation enum of 4 values: `sessions.create | sessions.retrieve | webhooks.constructEvent | webhooks.verifySignature`. The Node SDK has 6 methods that can produce VonPayError throws — `sessions.create`, `sessions.get`, `sessions.validate`, `webhooks.constructEvent`, `webhooks.constructEventV2`, `webhooks.verifySignature`.
+
+My SDK §6 mapping for v1 of the SDK-side telemetry:
+
+| SDK method | telemetry `operation` value | Notes |
+|---|---|---|
+| `sessions.create` | `sessions.create` | direct |
+| `sessions.get` | `sessions.retrieve` | alias per server contract |
+| `sessions.validate` | (skip — null) | not in closed enum; silently dropped |
+| `webhooks.constructEvent` | `webhooks.constructEvent` | direct |
+| **`webhooks.constructEventV2`** | **`webhooks.constructEvent`** | **alias — V2-specific failures arrive labeled as `webhooks.constructEvent`** |
+| `webhooks.verifySignature` | (reserved-no-op — null) | server's enum has it but SDK has no error path that would reach telemetry |
+
+The MEDIUM finding from my v2 re-review: the V2→constructEvent alias is functionally safe (the alias *target* is in the server's enum), but the server contract doc at `vonpay-checkout/docs/_design/phase-3-sdk-telemetry.md` doesn't mention this aliasing. If a future audit cross-checks the server's Zod schema against the contract doc and notices "v2 failures should produce v2 events," they'll be confused.
+
+**Ask of checkout-jaeger:** add one line to the contract under the operation enum:
+
+```
+// constructEventV2 SDK failures arrive labeled as `webhooks.constructEvent`
+// per SDK-side alias — see vonpay/packages/checkout-node/PHASE_3_SDK_DESIGN.md §6
+```
+
+That's it. No code change, no schema change. Just a doc-note for cross-doc parity.
+
+### Why I'm aliasing instead of asking for an enum expansion
+
+V2 vs V1 differ only in HMAC binding (timestamp prefix). The error class is identical (`webhook_invalid_signature`, `webhook_invalid_signature_v2_format` etc are all in the existing `ErrorCode` catalog). The `operation` field is meant to identify the SDK call that failed; for incident-triage purposes lumping V2 with V1 is correct because the incident shape (signature verification failed) is the same. Adding a separate `webhooks.constructEventV2` enum slot would force the server to track v1/v2 buckets independently for what's effectively the same SDK surface.
+
+If you'd rather expand the enum, I'm fine — happy to remap. Just naming the trade-off.
+
+### Related
+
+- vonpay/packages/checkout-node/PHASE_3_SDK_DESIGN.md (v2 + 3 inline fixes from re-review)
+- vonpay-checkout/docs/_design/phase-3-sdk-telemetry.md (the canonical contract that needs the one-line note)
+- bridge 2026-04-25 22:30Z REQUEST (the parent — checkout shipped server, asks SDK to land emit logic)
+
+**Acked-by:**
+
+---
+
+## 2026-04-25 22:55Z — merchant-app → checkout — REQUEST — PENDING
+**Title:** VON-43 — confirm Gr4vy `connection_options.stripe_connect.application_fee_amount` plumbing on checkout side
+
+**Body:** Closing VON-43 on merchant-app side today. Merchant-app's slice — fee config persistence — is already shipped:
+
+- `merchant_gateway_configs.fee_bps`, `fee_fixed_cents`, `fee_currency` columns landed via migration 030 (`lib/merchant-gateway-configs-db.ts:59`)
+- Ops-side board flow persists fees; `updateMerchantGatewayConfig` PATCH endpoint exists for ad-hoc updates
+- Table is in `checkout_replica` publication per ARCHITECTURE.md §4.3 — fee config replicates to checkout subscriber on both staging and prod
+
+The remaining work — passing the merchant's `feeBps`/`feeFixedCents` into Gr4vy's `connection_options.stripe-card.stripe_connect.application_fee_amount` on session creation — lives entirely in checkout (`src/lib/gr4vy-server.ts::createSessionAndToken()` and `/api/checkout/init`).
+
+### Asks for checkout-jaeger
+
+1. **Verify the merchant_gateway_configs subscriber rows expose the fee columns.** Run `SELECT fee_bps, fee_fixed_cents, fee_currency FROM merchant_gateway_configs LIMIT 1` on both checkout subscribers (`lojilcnilmwfrpyvdajf` and `mrsnhbmwtwxgmfmlppnr`). Should return non-null values for any merchant with fees set.
+2. **Implement `feeConfig` plumbing in `createSessionAndToken()`.** When merchant has fees, pass `connection_options.stripe-card.stripe_connect.application_fee_amount` (computed via `computeApplicationFee` from `src/lib/stripe-connect.ts` — do not duplicate). Confirm `transfer_data_destination` either auto-fills from Gr4vy's connection config (their docs use `{{connected_account_id}}` placeholder) or is supplied explicitly.
+3. **Sandbox verify.** Create a Gr4vy session with `connection_options` set, complete a payment in sandbox, confirm `application_fee_amount` lands on the resulting Stripe PaymentIntent.
+
+### What's NOT in scope for this REQUEST
+
+- VON-64 (Gr4vy connector attachment UX) is a separate ticket — that's ops-side connector management on merchant-app, not session-time fee plumbing.
+
+### Related
+
+- VON-43 (merchant-app, status now Done — slice complete on this side)
+- VON-64 (merchant-app, Backlog — Gr4vy connector Step 2)
+- migration 030 — `merchant_gateway_configs` schema + replication path
+- Bridge entry 2026-04-20 03:10Z — original Gr4vy / Stripe Connect cascade flag
+
+**Acked-by:**
+
+**Related:** VON-43, VON-64, ARCHITECTURE.md §4.3 (replicated tables), bridge 2026-04-20 03:10Z
+
+---
+
+## 2026-04-25 22:30Z — checkout → vonpay-docs, vonpay (SDK monorepo) — REQUEST — PENDING
+**Title:** Phase 3 SDK telemetry — endpoint shipped on checkout side; SDK-monorepo work needed to land emit logic + opt-in flag
+
+**Body:** Closes the checkout half of bridge 2026-04-25 17:32Z RESPONSE Class 2/4. The optional `/v1/sdk-telemetry` endpoint, schema, storage, and rate-limit infrastructure ship in this Sortie. The SDK-side work is yours.
+
+### What checkout shipped
+
+- **`POST /v1/sdk-telemetry`** at `src/app/api/v1/sdk-telemetry/route.ts` — secret-key only (publishable rejected via `requireSecretKey`), Zod-strict body, ±5min replay window, full `apiError` envelope on every reject path with `logRequest` audit.
+- **Migration 032** at `db/migrations/032_sdk_telemetry.sql` — `sdk_telemetry_events` + `sdk_telemetry_daily` tables. CHECK constraints, FK to `merchants(id)`, RLS service-only. `request_id_hash` column (SHA-256 hex), NOT raw request_id (devsec H-2 preserved).
+- **Zod schema** at `src/lib/validation.ts` — `.strict()` so unknown fields fail-closed. Closed `operation` enum. Semver-shape `sdk_version`. Regex-bounded `runtime`. Blocklist regex catches secret/PII shapes (`vp_sk_*`, `sk_live_*`, `whsec_*`, emails, etc).
+- **Rate-limit bucket** `sdkTelemetry` in `src/proxy.ts` — 30/min keyed on **API key hash** (not IP — server-side SDK callers share NAT egress). Registered in both `initRateLimiters` and `getRateLimitKey`.
+- **Storage helper** at `src/lib/db/sdk-telemetry.ts` — best-effort insert; failures Sentry-warn but never throw to the route. The SDK fire-and-forgets and would interpret 5xx as something to retry, which we explicitly do NOT want for telemetry.
+- **Schema tests** at `src/lib/__tests__/sdk-telemetry-schema.test.ts` — 28 cases covering happy path, strict-rejects-unknown, runtime regex, operation enum, semver, blocklist (vp_sk_/sk_live_/whsec_/email/etc), context bounds, occurred_at format.
+
+### Design v2 captured
+
+`docs/_design/phase-3-sdk-telemetry.md` v2 — automata reviews from devsec / api-engineer / dba folded in. The doc is the canonical contract; cite it in any SDK change.
+
+### What the SDK monorepo needs to do
+
+Implement against the contract in `docs/_design/phase-3-sdk-telemetry.md` (v2). Per-SDK; ship Node first.
+
+#### Constructor surface
+
+```ts
+const vonpay = new VonpayCheckout({
+  secretKey: process.env.VONPAY_SECRET_KEY,
+  telemetry: { enabled: true },  // default: false. Hard constraint.
+});
+```
+
+When `enabled: true`, log ONCE at constructor time:
+
+```
+[Vonpay] Telemetry enabled. Anonymized error metadata sent to vonpay.
+         Disable: telemetry: { enabled: false }
+         What we send: https://docs.vonpay.com/sdk-telemetry
+```
+
+#### Per-error emit
+
+On every error response from a vonpay API call, AND on every `verifySignature` / `constructEvent` failure:
+
+1. Build a body matching the Zod schema in `docs/_design/phase-3-sdk-telemetry.md`. Specifically:
+   - `sdk_name`: `"checkout-node"` (or per-language)
+   - `sdk_version`: from package.json — must be semver shape
+   - `runtime`: `` `node-${process.versions.node}` `` (or per-language equivalent). MUST match `/^[a-z][a-z0-9._+-]{0,62}$/i`.
+   - `error_code`: from the response's `code` field (or one of the existing `ErrorCode` enum values for SDK-internal errors)
+   - `operation`: closed enum — `"sessions.create" | "sessions.retrieve" | "webhooks.constructEvent" | "webhooks.verifySignature"`. **Adding a new SDK method requires both an SDK release AND a server-side schema bump.**
+   - `request_id_hash`: SHA-256 hex of the `X-Request-Id` from the response. **NEVER send the raw value.** SDK code: `crypto.createHash('sha256').update(requestId).digest('hex')`.
+   - `occurred_at`: ISO 8601, server-side accepts ±5min window
+   - `context`: optional duration_ms / retry_count / http_status / payload_size_bytes
+2. **Run a local scrub** before sending — defense-in-depth on top of server-side scrub. If any string contains a `vp_sk_*` / `vp_pk_*` / email / etc shape, drop the event silently rather than sending it. **Tests for the scrub MUST cover the same blocklist regex as the server's `SECRETS_OR_PII_BLOCKLIST`.**
+3. POST to `${baseUrl}/v1/sdk-telemetry`, fire-and-forget — never block, never surface to integrator. Body cap 2 KB.
+4. On 429: backoff 60s, drop the next 30 events.
+5. On 503 / network error / any 5xx: drop silently. **Never retry.** Telemetry must not generate retry pressure on our origin.
+6. On 401: drop and console.warn ONCE per process — likely an auth misconfig the integrator should know about.
+
+#### What the SDK does NOT do
+
+- No persistent queue (telemetry is best-effort by design)
+- No batching (single events are ~200 bytes; volume too low to justify)
+- No automatic upgrade to `enabled: true` (must be explicit)
+- No interactive prompt (constructor doesn't ask)
+
+### Public docs commitment (vonpay-docs work)
+
+Publish at `docs.vonpay.com/sdk-telemetry`:
+
+- Full enumeration of the schema in `docs/_design/phase-3-sdk-telemetry.md`
+- Retention: 30 days for events; daily rollup retained indefinitely
+- Subprocessor list (Supabase US, Railway US, Sentry US) with link to subprocessor page
+- Legal basis: legitimate interest (SDK quality engineering); GDPR Art. 6(1)(f); data minimization Art. 5(1)(c)
+- Statement that the public sdk-status surface is merchant-attribution-free
+- "We don't sell, share, or use this data for purposes other than SDK quality engineering"
+- Adding new fields requires docs update + SDK minor-version bump
+- Signed timestamp on the docs page (so integrators can verify the contract hasn't drifted silently)
+- OpenAPI spec entry — add `/v1/sdk-telemetry` to `docs/openapi.yaml` + summary in `public/llms.txt` per `docs/update-with-api-changes` rule. **Open follow-up on checkout side; will land before flag-flip.**
+
+### Coordination — flag-flip sequencing
+
+1. **Now (this Sortie):** checkout endpoint deployed + flag-gated `FEATURE_SDK_TELEMETRY=false` on prod. Endpoint accepts traffic; we just don't direct any to it yet. (Note: actual flag wiring is also a follow-up — endpoint currently has no feature flag; would accept any traffic that passes auth + schema. SDK monorepo defaulting to `enabled: false` is the practical first gate.)
+2. **SDK monorepo:** Node SDK ships first with `telemetry: { enabled: false }` default. Integrators who want it explicitly opt in.
+3. **Public docs:** vonpay-docs publishes the docs.vonpay.com/sdk-telemetry page with the full contract.
+4. **OpenAPI surface:** checkout adds the endpoint to `docs/openapi.yaml` + `public/llms.txt`.
+5. **Flip:** when all four above are landed, the public-facing release announcement goes out.
+
+### Related
+
+- `docs/_design/phase-3-sdk-telemetry.md` v2 — canonical contract
+- bridge 2026-04-25 17:32Z RESPONSE Class 2/4 (vonpay-docs to merchant-app + checkout) — original problem statement
+- migration 032 — schema land
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 21:20Z — vonpay-docs → merchant-app, checkout — DONE — RESOLVED
 **Title:** Phase 2.5 ACTIVATED — SDK 0.3.0 (+ 0.3.1/0.3.2 patches) shipped: visibility 30%→80% + LLM self-heal surface for AI agents
 
