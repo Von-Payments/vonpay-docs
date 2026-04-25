@@ -58,8 +58,33 @@ Test-mode merchant-custom-domain routing → prod 404 issue is closed for stagin
 - **Tagging:** `Sentry.setTag` calls in `PaymentContainer.tsx` set `session.id`, `session.country`, `session.has_success_url` once session loads. Buyer name + email NOT tagged (already scrubbed in beforeSend; tagging widens exposure unnecessarily).
 - **`reportClientError` callsites mirrored to Sentry:** the existing fire-and-forget `/api/checkout/client-error` POST is now belt-and-suspenders'd with `Sentry.captureMessage(event, { level: "warning", tags, extra })`. If the buyer's network can't reach our origin (offline, blocked, our server down), the report still lands in Sentry via its retry queue. Relevant callsites: VON-128's `checkout.redirect.skipped` (no_redirect_url / invalid_url / protocol_rejected), Stripe error events (`stripeDeclined` / `stripeError`), Gr4vy embed errors.
 
-**IN-PROGRESS:**
-- Server-side `logRequest` audit (gap class 1) — running in background via api-engineer subagent against all 20 `app/api/**/route.ts` files. Will report total gaps + per-route HIGH/MEDIUM/LOW grouping in a follow-up bridge DONE on top of this entry once the audit completes.
+**Server-side `logRequest` audit (gap class 1) — DONE; fixes deferred to Sortie 8:**
+
+Audited all 20 `app/api/**/route.ts` files. Confirmed `apiError()` does NOT auto-log, so each early-return `return apiError(...)` inside a `try{}` is a real gap.
+
+**Total: 79 gaps**
+- **HIGH (auth / origin / ownership / chargeable-after-expiry / signature reject): 36**
+- **MEDIUM (validation, state-machine, transient): 36**
+- **LOW (catch-block 500s, intentional opacity): 7**
+
+**7 routes have ZERO `logRequest` calls anywhere:**
+- `app/api/checkout/charge/route.ts` (13 returns)
+- `app/api/checkout/session/route.ts` (10 returns) — **security-adjacent: bind-tamper / replay / race-lost paths use `log.warn` only, no DB audit row**
+- `app/api/admin/request-logs/route.ts` (6) — admin surface
+- `app/api/admin/webhooks/route.ts` (7) — admin surface
+- `app/api/admin/webhooks/test/route.ts` (12) — admin surface
+- `app/api/internal/merchant-gateway-credentials/route.ts` (12) — bridge-consumer correlation gap
+- `app/api/internal/webhook-subscriptions/[id]/signing-secret/route.ts` (15 across POST+DELETE) — bridge-consumer correlation gap
+
+**Top-priority HIGH fixes (Sortie 8 scope):**
+- `checkout/complete/route.ts:35` (`origin_forbidden`), `:48` (`session_not_found`), `:59` (`session_expired` — VON-129 chargeable-after-expiry guard), `:97` (`auth_key_type_forbidden`), `:127` (`transaction_verification_failed`)
+- `checkout/session/route.ts:72,80,116` (bind-tamper, replay, race-lost — security-relevant)
+- All `webhooks/{vp_gw_m4x7,vp_gw_r8k2,retry}` 401 sig-reject and missing-secret paths
+- All `internal/*` auth + ownership-check returns
+
+**Pattern fix:** add `logRequest({...})` immediately before each `return apiError(...)`, mirroring the exemplar at `checkout/init/route.ts:47–55`. For HIGH paths that already call `log.warn`/`log.error` (Sentry trail but no DB row), bring `logRequest` adjacent.
+
+Filing Sortie 8 with the 36 HIGHs grouped by route. Estimated ~1 Sortie of mechanical work.
 
 ### 17:32Z docs RESPONSE — Class 5 (hosted checkout buyer-side) absorbed
 
