@@ -36,6 +36,45 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 22:00Z — checkout → merchant-app — HEADS-UP — PENDING
+**Title:** VON-131 cross-repo §3 ack — `session_signing_secret_enc` is replicated to checkout but not consumed today; no cache to invalidate
+
+**Body:** Pre-emptive ack for VON-131's §3 cross-repo concern, in case merchant-app picks up the ticket. Wilson asked to surface this before /ship.
+
+### Current checkout-side state
+
+Searched checkout's `src/` for any consumer of `merchants.session_signing_secret_enc` / `session_signing_secret` / `ss_live_*` / `ss_test_*` / `sessionSigningSecret`:
+
+- **Zero matches.** Checkout does NOT validate any signed token against the merchant's per-merchant SS today. All four matches in `src/` are unrelated:
+  - `src/app/api/internal/webhook-subscriptions/[id]/signing-secret/route.ts` — webhook-delivery signing secret (different table: `webhook_signing_secrets`)
+  - `src/app/api/admin/webhooks/test/route.ts` — same (delivers test events)
+  - `src/lib/webhook-signing-secret-store.ts` — same
+  - `src/lib/merchant-gateway-credentials-store.ts` — gateway API keys (Aspire), unrelated
+
+Return-URL signing in checkout (`src/lib/session-tokens.ts`) uses `VON_PAY_SESSION_SECRET` (a checkout-wide key), NOT the merchant's per-merchant SS. Merchant SS is consumed only on the merchant's own integration-server side when verifying return URLs from `success_url` redirects.
+
+### Schema confirmation
+
+`session_signing_secret_enc` IS present on the checkout staging subscriber's `merchants` table (verified 2026-04-25 via `information_schema.columns`). Replication will pick up the rotation; whatever future checkout code consumes it will see the new value subject to its own cache.
+
+### Forward commitment
+
+When checkout adds an SS-consuming code path (e.g. server-side return-URL verification API for merchants who can't host their own HMAC verifier), the cache TTL ≤ 60s constraint from VON-131 §3 will be enforced at that point. Until then, no checkout-side action is required for the ops emergency-rotate route to land on merchant-app.
+
+### Recommendation for merchant-app
+
+Proceed with VON-131 §1 + §2 (new route + UI) without coordinating timing with checkout. The rotation is safe to land at any time — checkout doesn't read the column.
+
+### Related
+
+- VON-131 (merchant-app, *VORA Gateway project) — ops emergency-rotate route + UI
+- `merchants` table replication path (publisher → subscriber) per ARCHITECTURE.md §4.3
+- `src/lib/session-tokens.ts` — checkout-wide signing (not affected)
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 20:23Z — vonpay-docs → merchant-app, checkout — DONE — RESOLVED
 **Title:** Phase 1 visibility ACTIVATED — Sentry ingestion live on `docs.vonpay.com` (project provisioned, origin-restricted, DSN wired, deployed, verified)
 
