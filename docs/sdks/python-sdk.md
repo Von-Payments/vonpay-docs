@@ -11,7 +11,7 @@ Typed Python client for the Von Payments Checkout API, published as `vonpay-chec
 ## Install
 
 ```bash
-pip install vonpay-checkout==0.1.3
+pip install vonpay-checkout==0.2.0
 ```
 
 Pinning to an exact version is recommended during the pre-1.0 window — minor bumps may add options or change defaults.
@@ -157,6 +157,76 @@ except VonPayError as e:
     print(e.fix)     # "Amount must be a positive integer in minor units (cents). 1499 = $14.99"
     print(e.docs)    # "https://docs.vonpay.com/integration/create-session#required-fields"
 ```
+
+## Error reporting
+
+The SDK accepts an optional `error_reporter` callback so integrators can pipe SDK failures into their own observability stack (Sentry, Datadog, custom logger). **The SDK never phones home** — your reporter is invoked synchronously, fire-and-forget; if it raises, the SDK swallows it (with a `logging.warning` on the `vonpay.checkout` logger) and continues.
+
+### When it fires
+
+- API request failures: non-retryable 4xx, retry-exhaustion on 5xx, network/timeout errors after retry exhaustion
+- `webhooks.construct_event` / `construct_event_v2` verification failures (signature mismatch, stale timestamp, malformed v2 header)
+
+It does **not** fire on:
+- `verify_signature` / `verify_return_signature` — these return `bool`, never raise
+- The constructor's invalid-key-prefix `ValueError` — that's a dev-time error before the reporter is wired
+
+### Callback shape
+
+```python
+from vonpay.checkout import ErrorReporter, ErrorReporterContext, VonPayError
+
+def reporter(err: BaseException, ctx: ErrorReporterContext) -> None:
+    # err is VonPayError or another Exception subclass
+    # ctx fields:
+    #   method: str          — "sessions.create" / "webhooks.construct_event" / etc.
+    #   sdk_version: str
+    #   url: str | None      — origin + path, no query string (no PII via params)
+    #   status: int | None   — HTTP status if from API response
+    #   request_id: str | None  — X-Request-Id for correlation
+    #   code: str | None     — server error code
+    #   attempt: int | None  — 0-indexed retry attempt
+    ...
+```
+
+### Sentry example
+
+```python
+import sentry_sdk
+from vonpay.checkout import VonPayCheckout
+
+def report_to_sentry(err, ctx):
+    sentry_sdk.capture_exception(
+        err,
+        tags={"sdk": "vonpay-python", "method": ctx.method, "code": ctx.code},
+        contexts={"vonpay": ctx.__dict__},
+    )
+
+client = VonPayCheckout(
+    api_key=os.environ["VON_PAY_SECRET_KEY"],
+    error_reporter=report_to_sentry,
+)
+```
+
+### Logging example
+
+```python
+import logging
+from vonpay.checkout import VonPayCheckout
+
+log = logging.getLogger("myapp")
+
+client = VonPayCheckout(
+    api_key=os.environ["VON_PAY_SECRET_KEY"],
+    error_reporter=lambda err, ctx: log.error(
+        "vonpay sdk error", extra={"err": str(err), "ctx": ctx.__dict__}
+    ),
+)
+```
+
+`error_reporter` is opt-in and additive — passing nothing preserves pre-0.2.0 behavior exactly. Errors still propagate via `raise` regardless of whether the reporter is configured.
+
+---
 
 ## Auto-Retry
 
