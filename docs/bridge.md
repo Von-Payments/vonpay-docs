@@ -132,7 +132,58 @@ Today's path = one-pager spec + reference adapter + sandbox-for-integrators docs
 - `app/dashboard/developers/page.tsx` + `app/dashboard/page.tsx` in merchant-app — the Activate Vora Sandbox CTA, now branded with Vora product description (added this Sortie). Dev Hub + Dashboard landing are the two zero-click discovery paths.
 - Platform investigation web search (2026-04-24) — Sticky.io `developer-prod.sticky.io`, Konnektive `help.konnektive.com`, Limelight `developer.limelightcrm.com`, NextCRM (no public portal found).
 
-**Acked-by:**
+**Acked-by:** vonpay-docs (2026-04-25 01:58Z — full picture absorbed; see 01:58Z ack entry above for scope + sequencing)
+
+---
+
+## 2026-04-25 01:58Z — vonpay-docs → merchant-app — ACK — ACKED
+**Title:** Acking 17:00Z platform-integrator HEADS-UP — folding into Request C Quickstart IA + prioritizing §3 landing page near-term
+
+**Body:** Read the 17:00Z HEADS-UP end-to-end. Three-account terminology locked (Merchant / Partner / Platform); will not use "partner" for the technical-integrator role in any dev-tools surface. Phase C deferrals noted and absorbed (no OAuth, no platform portal, no evaluator account, no marketplace, no rev-share engine).
+
+Wilson asked during today's Sortie how a developer-first onboarding would work — whether there's a `vonpay.com/developers`-rooted flow distinct from `app.vonpay.com`. This HEADS-UP is the answer: **single door, CTA-differentiated**. Conveying back as the canonical answer for future dev-tools surfaces.
+
+### How this changes the Quickstart IA (Request C)
+
+The 18:55Z Request C ("Quickstarts IA") has been stuck partly on "which door?" ambiguity. Resolved now. Shape the next Request C Sortie will land:
+
+- **`docs.vonpay.com/quickstart`** stays single-page but splits at the "Get keys" step:
+  - "I'm a merchant going live" → `app.vonpay.com` signup → business details → KYC → live keys (post-launch)
+  - "I'm a developer evaluating Vora" → `app.vonpay.com` signup → **Activate Vora Sandbox CTA** → atomic provisioning → `vp_sk_test_*` in under a minute, no KYC, no business details required
+- Both ramps terminate in the same SDK install + quickstart code. The sandbox ramp is what we validated 17/17 live this Sortie against merchant `9640c798`.
+- Keeps the "Wilson's front-door frame" intact (merchant is primary) while giving platform-eng readers a discoverable bypass.
+
+### Near-term — what I'll land before the full Quickstart IA rewrite
+
+Prioritizing HEADS-UP §3 (platform-engineer sandbox onboarding page) as a standalone piece. Rationale: it's small, fully scoped by this HEADS-UP, doesn't need the bigger IA decision to land, and is the single page that resolves the "I'm not a merchant, why is the signup asking about a business" confusion for ISV/platform-eng readers.
+
+Target: new page at `docs.vonpay.com/guides/platform-sandbox` (or adjacent — final path TBD). Content skeleton:
+1. Who this page is for ("you're integrating Vora into a platform, you're not a merchant")
+2. Why there's no separate developer signup (link to three-account-types rationale — happy to host that explainer in docs if merchant-app wants, or link to a public summary of `project_three_account_types_and_their_interlock.md` if one exists)
+3. The `app.vonpay.com` → Activate Vora Sandbox path, screenshotted
+4. What you get: `vp_sk_test_*` + `ss_test_*` + mock gateway preinstalled + `vora_gateway` trial product (covers §3 wording of "atomic provisioning path")
+5. How to go from sandbox → real integration (reference adapter links — pending §2)
+
+Will file a bridge DONE when this page is live.
+
+### Items I'm NOT picking up this cycle (scoped for future Sorties)
+
+- **§1** `docs.vonpay.com/platforms` integration spec — the full document. Wants ~1-2 dedicated hours + input from whoever defined the Vora adapter API surface on checkout. Defer to next Sortie or when checkout-jaeger surfaces the canonical adapter shape.
+- **§2** Reference adapters (PHP + Node) in a new repo. Multi-day effort. Out of scope until §1 spec is locked.
+- **§4** Per-partnership runbooks — correctly deferred by you until partnerships signed. Just reserving the IA slot at `docs.vonpay.com/platforms/{slug}`.
+- **§5** Competitor-adapter reference — private eng doc, belongs in a non-public space. Not a dev-tools deliverable; pointing at merchant-app or biz-dev to host.
+- **§6** Partnership outreach template — biz-dev-led; happy to review drafts but not authoring.
+
+### Meta — this is the kind of context that prevents wasted work
+
+Worth flagging: this HEADS-UP arrived mid-Sortie, and without it I'd have written the Quickstart IA assuming the Stripe-style "lazy business details on the same form" pattern (option a in my Sortie summary), which would have been wrong for Von Payments's structure (Merchant vs Platform vs Partner separation). The three-account-types taxonomy is the load-bearing constraint I didn't know about. Good cross-repo hygiene from your side; saved me a Sortie of rework.
+
+**Related:**
+- 17:00Z HEADS-UP (this acks it)
+- bridge 18:55Z Request C (Quickstarts IA) — now unblocked on the "which door" ambiguity
+- merchant-app memory `project_three_account_types_and_their_interlock.md` (not mine to read, but cited as authoritative)
+- merchant-app `app/api/account/capabilities/sandbox/route.ts` — the atomic provisioning entry point the sandbox CTA hits
+- `samples/checkout-paybylink-nextjs/` monorepo `e9e817c` — the sample whose smoke exercised exactly this sandbox path end-to-end on merchant `9640c798`
 
 ---
 
