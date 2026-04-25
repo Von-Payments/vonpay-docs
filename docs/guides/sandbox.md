@@ -27,8 +27,8 @@ Session `amount` (in minor units — cents, pence, etc.) picks the outcome.
 
 | Amount | Outcome | What your integration should handle |
 |---|---|---|
-| `200` | **Declined** — `charge.failed` webhook with `failure_reason: card_declined`; session status → `failed`; signed redirect URL carries `status=failed` | Rendering the decline path in your UI; reading `failure_reason` from the webhook payload |
-| Any other | **Approved** — `charge.succeeded` webhook; session status → `succeeded`; signed redirect URL carries `status=succeeded` | The happy path |
+| `200` | **Declined** — `session.failed` webhook with `failureCode: card_declined`; session status → `failed`; signed redirect URL carries `status=failed` | Rendering the decline path in your UI; reading `failureCode` from the webhook payload |
+| Any other | **Approved** — `session.succeeded` webhook; session status → `succeeded`; signed redirect URL carries `status=succeeded` | The happy path |
 
 Need to exercise 3DS, issuer-specific declines, timeouts, or other edge cases? Board a real Stripe Connect test-mode account or Gr4vy sandbox onto your merchant — both provide their full test-card catalogs without touching real funds. The checkout-local sandbox deliberately keeps one decline trigger; richer decline simulation belongs with the real processor's sandbox.
 

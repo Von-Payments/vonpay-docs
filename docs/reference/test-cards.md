@@ -8,7 +8,7 @@ Use these card numbers in test mode to simulate different payment outcomes. Any 
 
 These cards work with sandbox merchants boarded on the standard processor sandboxes (Stripe test mode, Gr4vy sandbox, Aspire sandbox — whichever your sandbox merchant routes through).
 
-If your sandbox merchant is on the `mock` gateway instead, outcomes are chosen by session **amount**, not card number — see [Sandbox & Test Mode → Mock gateway](../guides/sandbox.md#mock-gateway--deterministic-outcomes).
+If your sandbox merchant is on the `mock` gateway instead, outcomes are chosen by session **amount**, not card number — see [Sandbox & Test Mode → Sandbox outcomes](../guides/sandbox.md#sandbox-outcomes--deterministic-by-amount).
 
 ## Card Numbers
 

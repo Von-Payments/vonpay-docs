@@ -27,12 +27,17 @@ If your platform's adapter contract requires you to *return a void/refund result
 - **Production:** `https://checkout.vonpay.com`
 - **Sandbox:** same base URL; key prefix (`vp_sk_test_*` vs `vp_sk_live_*`) selects the environment. Test keys cannot accidentally hit live data and vice versa.
 
-### Required headers
+### Headers
+
+**Required:**
 
 - `Authorization: Bearer <vp_sk_*>` — the merchant's secret API key
 - `Content-Type: application/json`
+
+**Strongly recommended (server accepts requests without them, but you should always send):**
+
 - `Von-Pay-Version: 2026-04-14` — pin the API version. Omitting this header tracks the latest stable, which can change behind you.
-- `Idempotency-Key: <unique-string>` — see [Idempotency](#idempotency) below
+- `Idempotency-Key: <unique-string>` — see [Idempotency](#idempotency) below. Not server-enforced today, but every connector should send one to make retries safe.
 
 ### Endpoints today
 
@@ -88,7 +93,7 @@ Your adapter's "3DS challenge" and "soft-decline retry" code paths typically don
 
 ## Idempotency
 
-Every `POST /v1/sessions` request **must** carry an `Idempotency-Key` header with a unique-per-session value (typically your platform's internal order ID + a stable per-attempt suffix).
+Every `POST /v1/sessions` request **should** carry an `Idempotency-Key` header with a unique-per-session value (typically your platform's internal order ID + a stable per-attempt suffix). The header is not server-enforced today — requests without it succeed — but a connector that omits it cannot make session creation safely retryable, which matters under transient network failures.
 
 - Replays of the same `Idempotency-Key` within 24 hours return the original response — including the original `checkoutUrl`. No duplicate session is created.
 - After 24 hours, the key may be reused; a new session is created.

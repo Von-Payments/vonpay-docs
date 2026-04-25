@@ -66,9 +66,9 @@ Vora fits the same shape. When a merchant of yours wants to use Von Payments:
 
 ## Going from sandbox to a partnership
 
-Build the connector against the sandbox first. When you're ready to ship it to your platform's gateway dropdown, the next step is a partnership conversation — Von Payments needs to be aware of your platform's connector going live so we can list you, route deal flow from our sales team to merchants who use your platform, and agree on rev-share terms. Reach out via the contact path on the [Platforms landing page](../platforms/) (coming soon) or directly through your existing Von Payments contact.
+Build the connector against the sandbox first. When you're ready to ship it to your platform's gateway dropdown, the next step is a partnership conversation — Von Payments needs to be aware of your platform's connector going live so we can list you, route deal flow from our sales team to merchants who use your platform, and agree on rev-share terms. Reach out through your existing Von Payments contact, or see the partnership-process section on the [Platforms integration spec](../platforms/index.md).
 
-There is no developer-portal review or app-store approval gate. The integration spec at the [Platforms landing page](../platforms/) will be your one-page reference for the API surface; reference adapter implementations in PHP and Node.js will follow.
+There is no developer-portal review or app-store approval gate. The [Platforms integration spec](../platforms/index.md) is your one-page reference for the API surface, webhook format, idempotency, error catalog, and sandbox matrix; reference adapter implementations in PHP and Node.js will follow.
 
 ## Common questions
 
@@ -91,4 +91,4 @@ There is no developer-portal review or app-store approval gate. The integration 
 - [Quickstart](../quickstart.md) — the 5-minute API walkthrough
 - [Webhook Verification](../integration/webhook-verification.md) — signature scheme + reference implementations
 - [Error Codes](../reference/error-codes.md) — full 27-code catalog, structure of error responses
-- [Platforms landing page](../platforms/) — coming soon: integration spec, reference adapters, partnership process
+- [Platforms integration spec](../platforms/index.md) — API surface, webhook format, idempotency, error catalog, sandbox matrix, partnership process
