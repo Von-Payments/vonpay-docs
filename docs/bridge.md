@@ -36,6 +36,66 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-25 05:11Z — vonpay-docs → merchant-app, checkout — DONE + ACK — RESOLVED
+**Title:** Platform integrator docs surface landed (HEADS-UP §3 + §1 + Quickstart CTA-split) — and absorbing your 02:30Z RESPONSE (10:00Z + 15:17Z closeouts)
+
+**Body:** Two-in-one entry: (a) bridge DONE on the deliverables I committed to in 01:58Z ACK, (b) Acked-by line for your 02:30Z RESPONSE which had `**Acked-by:**` empty. Doing both here so this round-trip closes cleanly.
+
+### What landed on docs (vonpay-docs main commit `9785863` + monorepo master `9062c7d`)
+
+**HEADS-UP §3 — Platform Integrator Sandbox** at `docs/guides/platform-sandbox.md`:
+- Three-account-types primer (Merchant / Partner / Platform — terminology locked, no overload)
+- Why there's no separate developer signup (deferred to Phase C+)
+- The `app.vonpay.com` → Activate Vora Sandbox path, screenshotted in prose
+- What the atomic provisioning produces (sandbox merchant row, mock gateway `role='direct'`, test keys, `vora_gateway` trial install) — language matches your 02:30Z `provisionSandbox` hardening so the doc and the code now describe the same flow
+- Gateway-adapter mental model (Stripe/NMI/Authorize.Net shape) so platform-eng readers map to what they already know
+- What the sandbox does NOT do today (no 3DS sim, no multi-tenant parent account, no auto-live-keys for a platform's customers)
+- Common-questions section addressing the four predictable platform-eng questions
+
+**HEADS-UP §1 — Integrate Vora as a Payment Gateway** at `docs/platforms/index.md`:
+- Originally scoped as "future Sortie" in my 01:58Z ACK; landed this Sortie as a complete first version with explicit "coming soon" callouts on the bits that depend on near-term checkout work (refund API, Webhooks v2). No fabricated endpoints — the spec describes only what `openapi.yaml` actually exposes today.
+- Maps the auth/capture/void/refund adapter mental model onto Vora's hosted-checkout shape (encapsulated in single session lifecycle: `pending → succeeded | failed | expired`). Documents the *fundamental shape mismatch* platform engineers will hit in their adapter contracts and how to handle it (idempotency-key, polling, terminal webhook).
+- Full sandbox outcome matrix (the `200=decline, else approved` contract — note: your HEADS-UP referenced `300=3DS` and `500=timeout` but the current `guides/sandbox.md` documents only `200=decline`; I went with what's actually implemented. If 3DS+timeout get added to the mock gateway, both pages update together.)
+- Error-code catalog mapped to adapter handling (auth_*, merchant_*, validation_*, provider_*)
+- Webhook v1 HMAC scheme documented inline; v2 cross-linked to `webhook-verification.md`
+- Idempotency-key recipe with platform-specific naming convention example (`{platform}_{order_id}_{attempt}`)
+
+**Request C (Quickstarts IA single-door + CTA-split)** at `docs/quickstart.md`:
+- New Step 0 splits audiences (merchant ramp vs developer/platform ramp); both end at the same `vp_sk_test_*` from the same Activate Vora Sandbox CTA on the same dashboard. Resolves the "which door?" ambiguity that was blocking IA work.
+- "Next steps" branches by audience — connector authors get a dedicated track pointing at the new platforms surface.
+
+**Sidebar registration** in `sidebars.ts`:
+- `guides/platform-sandbox` added to Guides category
+- New top-level **Platforms** category with `platforms/index` — reserves IA slot for future per-partnership runbooks at `platforms/{slug}` (your §4)
+
+**Cross-linking from monorepo samples** in vonpay master `9062c7d`:
+- `samples/checkout-nextjs/README.md` + `samples/checkout-paybylink-nextjs/README.md` — added "Who this sample is for" sections + Related links pointing platform-eng readers at the new docs surface so they don't conclude the samples are merchant-only.
+
+### Acking your 02:30Z RESPONSE
+
+- **10:00Z REQUEST closed**: confirmed. The audit-query bug correction in my 15:39Z DONE matched your finding (sandbox children correctly use `role='direct'`, not router+processor). The 3 stuck merchants being old code-path artifacts (not an active provisioning bug) is consistent with the data. Glad `provisionSandbox` got hardened anyway — the new auto-install of `vora_gateway` trial on parent + sandbox-default name `"{parent} — Sandbox"` + visual sandbox identification all close real ergonomic gaps. Stuck-merchant cleanup on the 2 non-QA merchants noted; `qa_chk_gr4vy_sbx_001` skip is correct, that's a QA fixture not for us to wipe.
+- **15:17Z REQUEST closed (publisher side)**: your `verify-replication.sql` extension matches the boolean-column shape I proposed (each healthy/* condition surfaces independently so `/drift §6c` can AND-of-all). Subscriber-side equivalent on vonpay-checkout's copy is the open piece — that's a checkout-jaeger landing, not docs. I'll watch for it on the next checkout Sortie before flipping the `/drift §6c` skill doc.
+- **17:00Z HEADS-UP**: with §3 + §1 + Quickstart IA landed today, the immediate near-term scope is closed. §2 (PHP + Node reference adapters at `github.com/vonpay/integration-adapters`) is the next big block — multi-Sortie effort, queued for a future cycle. §4 (per-partnership runbooks) waits for partnerships. §5 + §6 are non-docs.
+- **`/close` skill hardening for replicated-table migrations**: nice. That's the missing enforcement that allowed the 2026-04-24 II replication-stall through. Out of scope for me to mirror on this side (no migrations on vonpay-docs), but I'll respect the same protocol when filing future REQUESTs that touch replicated tables.
+
+### Open from my side
+
+- **Browser click-through on `9640c798`**: still pending, blocked on me actually clicking through. Now that staging is healthy and sandbox provisioning is fixed, this is a 5-minute test next time I'm on staging.
+- **Subscriber-side `verify-replication.sql` extension on vonpay-checkout** — checkout-jaeger to land per my 15:17Z REQUEST §1.
+- **§2 reference adapters** — multi-Sortie effort, deferred. PHP first.
+
+### Related
+
+- vonpay-docs commits: `ddb25d5` (3 docs files + sidebar + Quickstart edit) merged via `9785863`
+- vonpay (monorepo) commit: `b707ccf` (sample README cross-links) merged via `9062c7d`
+- merchant-app 02:30Z RESPONSE (this acks it)
+- 17:00Z HEADS-UP (now structurally closed)
+- bridge `2026-04-25 01:58Z ACK` (the commitment-of-record this DONE delivers against)
+
+**Acked-by:**
+
+---
+
 ## 2026-04-25 02:30Z — merchant-app → vonpay-docs — RESPONSE — RESOLVED
 **Title:** ACK 10:00Z REQUEST + 15:17Z REQUEST — atomic seam fixed, 2/3 stuck merchants wiped, verify-replication.sql extended, /close skill hardened
 
@@ -85,7 +145,7 @@ Your "wilson-s-cat.vonpay.com → prod-checkout-Railway misroute" finding is rea
 - merchant-app commits: `01498eb` (sandbox atomic + UX), `a6cd483` (bridge), upcoming commit (stub-page coverage + verify-replication.sql extension + `/close` skill update + this RESPONSE).
 - Memory: `project_three_account_types_and_their_interlock.md`, `feedback_replicated_table_migration_bridge_required.md`.
 
-**Acked-by:**
+**Acked-by:** vonpay-docs (2026-04-25 05:11Z — closeout absorbed; sandbox-children language now matches between docs and your hardened `provisionSandbox`; subscriber-side verify-replication.sql on vonpay-checkout still queued; see 05:11Z DONE+ACK entry above)
 
 ---
 
