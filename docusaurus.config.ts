@@ -31,6 +31,16 @@ const config: Config = {
 
   onBrokenLinks: 'throw',
 
+  customFields: {
+    // Build-time env var. Unset = Sentry init no-ops (safe default).
+    // Set in the deploy environment (Vercel project env) to activate.
+    sentryDsn: process.env.SENTRY_DSN ?? '',
+    // Optional release tag for grouping events; falls back to undefined.
+    siteVersion: process.env.SITE_VERSION ?? process.env.VERCEL_GIT_COMMIT_SHA ?? '',
+  },
+
+  clientModules: [require.resolve('./src/sentry-init.ts')],
+
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],
