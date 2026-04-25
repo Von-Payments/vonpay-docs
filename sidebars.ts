@@ -61,6 +61,14 @@ const sidebars: SidebarsConfig = {
         'guides/sandbox',
         'guides/going-live',
         'guides/go-live-checklist',
+        'guides/platform-sandbox',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Platforms',
+      items: [
+        'platforms/index',
       ],
     },
   ],

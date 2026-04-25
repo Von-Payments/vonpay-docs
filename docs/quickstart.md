@@ -6,9 +6,20 @@ sidebar_position: 2
 
 Get a working checkout integration in 5 minutes.
 
-## Prerequisites
+## Step 0: Get your test keys
 
-- A Von Payments account with API keys from the [developer dashboard](https://vonpay.com/developers)
+Pick the path that matches what you're building. Both end at the same `vp_sk_test_*` key issued from the same dashboard — only the onboarding shape differs.
+
+### I'm a merchant going live with Von Payments
+
+Sign up at [app.vonpay.com](https://app.vonpay.com) with your work email (OTP login, no approval queue for sandbox). From the dashboard, click **Activate Vora Sandbox** at `/dashboard/developers` — you'll have `vp_sk_test_*`, `vp_pk_test_*`, and `ss_test_*` in seconds. Live keys (`vp_sk_live_*`) come after a separate KYC + contract review; see [Going Live](guides/going-live.md).
+
+### I'm a developer or platform integrator evaluating Vora
+
+Same starting URL: [app.vonpay.com](https://app.vonpay.com), OTP signup, **Activate Vora Sandbox**. The CTA short-circuits the merchant business-details collection — you get test keys without going through KYC. The merchant record you create is real, but the UX never asks you to be a business. See [Platform Integrator Sandbox](guides/platform-sandbox.md) for the full picture, and the [Platforms integration spec](platforms/index.md) if you're building a connector.
+
+### Other prerequisites
+
 - Node.js 20+ (or Python 3.9+ for the Python SDK)
 
 ---
@@ -271,9 +282,17 @@ Replace your test keys with live keys. That's it.
 
 ## Next steps
 
+### If you're integrating for your own checkout
+
 - [Webhooks Guide](integration/webhooks.md) — Event types, payloads, and retry behavior
 - [Error Handling](sdks/node-sdk.md#error-handling) — Structured errors and retry logic
 - [Node SDK Reference](sdks/node-sdk.md) — Full API surface
 - [CLI Reference](sdks/cli.md) — Command-line tools
 - [Python SDK](sdks/python-sdk.md) — Python integration
 - [Sample Apps](https://github.com/vonpay/examples) — Working example integrations
+
+### If you're building a platform/CRM connector
+
+- [Platforms — Integrate Vora as a payment gateway](platforms/index.md) — full spec for connector authors: API surface, webhook format, idempotency, error catalog, sandbox matrix
+- [Platform Integrator Sandbox](guides/platform-sandbox.md) — how the sandbox flow maps to your connector's dev loop
+- [Webhook Verification](integration/webhook-verification.md) — reference HMAC verifier code in Node, Python, Go, Ruby, PHP
