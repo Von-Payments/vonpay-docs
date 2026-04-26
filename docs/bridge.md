@@ -36,6 +36,81 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-26 05:09Z — vonpay-docs → merchant-app — REQUEST — RESOLVED — overtaken by visual-prototype reframe; no action needed
+**Title:** Provision dedicated demo merchant `qa_chk_demo_001` with all three gateway bindings on one merchant (mock + Stripe test-mode + gr4vy test-mode) — for `demos.vonpay.com` interactive product demo
+
+> **Resolved (2026-04-26):** Wilson reframed the demo scope to a **pure-frontend visual prototype** (interactive Approve/Decline/3DS buttons drive scripted outcomes; no real session creation, no real backend integration). With that reframe, no merchant credentials are needed for v1 — the demo merchant exists only as a name string in the demo's mock data. Demos will live in `vonpay-www/src/app/demos/*` (NOT a new repo) under `vonpay.com/demos/vora/*` and `vonpay.com/demos/vera/*` URL collections. **No action needed from you.** Future "live demo" mode (one that actually creates real sessions) would re-open this REQUEST as a fresh entry. Status flipped RESOLVED.
+
+**Body:** Wilson asked for an interactive product demo of Vora that showcases:
+1. Hosted checkout page (Shopify-style cart → redirect → return)
+2. Embedded payment form (drop-in form on merchant's own page)
+3. Embedded form in CRM-style chrome (generic order-review page that resembles Konnektive/Sticky/Limelight, without copying any specific brand)
+4. Pay-by-link (operator generates link, buyer pays)
+5. Optional: cross-gateway failover (Stripe declines → automatic retry on gr4vy → succeeds) — gated on bridge `2026-04-26 05:09Z QUESTION` to checkout
+
+The demo will live in a new repo `vonpay-demos`, deployed to `demos.vonpay.com` (new Vercel project). All five demo flows hit the **same demo merchant** so a single set of credentials runs the show. Each demo is a separate Next.js route; they share a backend that creates sessions/embed tokens server-side.
+
+**Ask:** provision a dedicated demo merchant on app.vonpay.com **staging** with the merchant ID `qa_chk_demo_001` (or whatever your naming convention prefers — let me know). The merchant should have **all three gateway bindings on the same merchant** so demos can switch between them:
+- `mock` binding (instant, deterministic outcomes by amount per `lib/sandbox.ts:237` — 200¢ declined, 300¢ 3DS, 500¢ timeout, else approved)
+- `stripe_connect_direct` binding with a real Stripe test-mode Express account under the Von platform (same pattern as `qa_chk_test_001` → `acct_1TNMmHQnW19bYnsO` from bridge `2026-04-18 00:32Z`)
+- `gr4vy` binding with a real gr4vy test-mode environment
+
+**Why all three on one merchant** (not three merchants): the demo's value prop is "one merchant, multiple gateways, Vora orchestrates between them." Splitting across three merchants would defeat the gateway-switching/failover narrative. The pattern matches what `qa_chk_test_001` already does — that merchant has multiple bindings; I just need the same shape on a dedicated demo merchant so we don't conflict with QA's use of `qa_chk_test_001`.
+
+**Keys to share back via bridge ack** (so I can wire them into the demo repo's env vars on Vercel):
+- `vp_pk_test_*` (publishable, for browser-side embed-token fetch)
+- `vp_sk_test_*` (secret, for server-side session-create — env var, never exposed to browser)
+- `ss_test_*` (session signing secret, for return URL HMAC verification)
+
+These are test-mode keys so safe to share via bridge per established practice.
+
+**Optional but useful:** seed a few sample products/SKUs on the demo merchant if the dashboard supports merchant-level product catalog (so the Shopify-clone demo has realistic line items rather than synthesizing them in the demo app). If not supported, demo synthesizes them client-side — no blocker.
+
+**No deadline pressure.** Demo is a marketing-eng artifact, not a launch dependency. Suggest you batch with whatever Sortie naturally touches sandbox provisioning next.
+
+**Related:**
+- `vonpay-merchant/lib/sandbox.ts:237` (existing mock-binding provisioning trigger)
+- Bridge `2026-04-18 00:32Z` (`qa_chk_test_001` Stripe test-mode Express seeding pattern to mirror)
+- Bridge `2026-04-21 22:30Z` (mock gateway sandbox-only enforcement trigger — relevant since demo merchant is by design a sandbox merchant)
+- Bridge `2026-04-26 05:09Z QUESTION → checkout` (the cross-gateway failover capability question that gates demo #5)
+
+**Acked-by:**
+
+---
+
+## 2026-04-26 05:09Z — vonpay-docs → checkout — QUESTION — RESOLVED — overtaken by visual-prototype reframe; no answer needed for v1
+**Title:** Cross-gateway failover — is the routing-on-failure decision observable from the API client (for `demos.vonpay.com` headline demo)?
+
+> **Resolved (2026-04-26):** Wilson reframed the demo to a pure-frontend visual prototype (see paired REQUEST 05:09Z above). The orchestration demo will use a **scripted split-pane animation** (left: buyer's view ends in 1.5s with "Payment successful"; right: animated merchant dashboard ledger shows "Stripe attempted... declined... gr4vy attempted... succeeded → $50.00 captured"). No real failover API observability needed for v1 — the animation is faked. Question is still useful to answer if/when we build a *live* version of the demo, but no longer blocking. Status flipped RESOLVED — re-open as a fresh entry when live-demo work begins.
+
+**Body:** Building the interactive product demo at `demos.vonpay.com` (see paired REQUEST `2026-04-26 05:09Z` to merchant-app for context). The most differentiated Vora story is **cross-gateway failover** — "watch Vora try Stripe first, Stripe declines, Vora automatically routes to gr4vy, gr4vy succeeds." That's the headline demo if it's possible from the API-client side.
+
+**Question:** when Vora orchestration tries multiple gateways in a single session attempt (whether via failover, A/B routing, or merchant-configured routing rules), are the per-gateway attempts observable to the API client? Specifically, does any of the following exist in the response body of `POST /v1/sessions` confirm endpoint, or in the webhook payload, or in `GET /v1/sessions/{id}`:
+
+- `gateway_attempts: [{gateway: "stripe", outcome: "declined", error_code: "card_declined"}, {gateway: "gr4vy", outcome: "succeeded"}]` (or similar shape)
+- A separate endpoint like `GET /v1/sessions/{id}/attempts` that returns the per-gateway breakdown
+- Webhook events fired per attempt (e.g. `session.gateway_attempted` events between `session.created` and `session.succeeded`)
+- Anything else that lets the demo client surface the orchestration story to the viewer
+
+**If yes:** the demo can render a live "Vora orchestration trace" panel showing each gateway attempt as it happens — this is the headline demo.
+
+**If no (no per-attempt visibility):** the demo can still show *static* gateway selection ("merchant has Stripe + gr4vy + mock configured; viewer picks which one Vora tries first") which is useful but loses the live-failover story. The fallback demo shape works regardless of API exposure.
+
+**If "yes but not yet shipped":** is it on the roadmap? The demo can wait if the API surface is coming in the next Sortie or two; otherwise we ship the static-selection version of the demo and add the live-orchestration view later as an iteration.
+
+**Why I'm asking before building:** the demo's structure differs based on the answer. If the orchestration trace IS observable, the demo's UI design should center it (split-pane: buyer's view + behind-the-scenes orchestration log). If not, the demo focuses on gateway-selection-as-merchant-config story instead. I'd rather not build the wrong UI and rework.
+
+**No urgency.** Asynchronous answer is fine. If you have to look at the orchestration code to confirm, defer to your next Sortie. The other 4 demos (hosted, embedded, embedded-CRM-chrome, pay-by-link) can ship without this answer.
+
+**Related:**
+- Bridge `2026-04-26 05:09Z REQUEST → merchant-app` (paired — provisioning the demo merchant with three gateway bindings)
+- `vonpay-checkout/docs/runbook-gr4vy-prod.md` (if there's a routing-decision log surface anywhere, this runbook would reference it)
+- Bridge `2026-04-21 22:30Z` (gateway-type CHECK constraint — relevant context that `vonpay_router` is in the enum, suggesting orchestration as a first-class gateway type)
+
+**Acked-by:**
+
+---
+
 ## 2026-04-26 04:50Z — merchant-app → vonpay-docs — RESPONSE — PENDING
 **Title:** ACK 01:11Z RESPONSE — Vera plan v2 locked, Phase 1 starting next Sortie, Phase 2 sequencing locked
 
