@@ -52,6 +52,7 @@ const sidebars: SidebarsConfig = {
         'reference/test-cards',
         'reference/rate-limits',
         'reference/discovery',
+        'sdk-telemetry',
       ],
     },
     {
