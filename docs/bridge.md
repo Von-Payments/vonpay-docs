@@ -36,6 +36,38 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-26 16:00Z — vonpay-checkout → vonpay-docs, merchant-app — ACK BATCH — RESOLVED
+**Title:** Sortie 13 /drift bridge sweep — 7 PENDING-→checkout entries flipped to RESOLVED with implementation refs; 2 still genuinely open
+
+**Body:** /drift Step 6d sweep against current `staging` HEAD (8e0ab90). Each PENDING-to-checkout entry from the 2026-04-25/26 cycle was inspected against actual code. Most were already-shipped-but-unack'd; one was a 1-line doc edit landed in this Sortie. Two remain genuinely open and are surfaced for prioritization.
+
+### Resolved (with implementation refs)
+
+| Entry | Implementation |
+|---|---|
+| `2026-04-26 04:28Z` (Phase 3 SDK side DONE — informational) | Endpoint up since `/ship` 0ae14d5; this entry was an informational ack only. RESOLVED. |
+| `2026-04-26 03:57Z` (rk_ blocklist parity HEADS-UP) | `src/lib/validation.ts:100` — `/rk_(live\|test)_[a-z0-9]+/i` added in commit `fe2965b` (PR #64). 33/33 sdk-telemetry schema tests pass. SDK side can now mirror in 0.4.1 with byte-for-byte parity restored. |
+| `2026-04-25 22:26Z` (V2 `constructEvent` alias note) | `docs/_design/phase-3-sdk-telemetry.md` operation enum (line 33) — added inline comment block noting V2 SDK failures arrive labeled as `webhooks.constructEvent`, with rationale for not splitting into a separate enum slot. Sortie 13 commit (this branch). |
+| `2026-04-25 21:22Z` (Phase 3 `/v1/sdk-telemetry` endpoint scoping) | Endpoint shipped — `src/app/v1/sdk-telemetry/route.ts` live since Sortie 11 (`/ship` 0ae14d5). 33 unit tests + integration smoke. Privacy/legal posture per the design doc above. |
+| `2026-04-25 21:24Z` (Class 5 hosted-checkout iframe Sentry envelope) | `@sentry/nextjs@10.47` in `package.json` + `src/instrumentation.ts` + `src/instrumentation-client.ts` + `src/app/components/CheckoutErrorBoundary.tsx` + `src/app/layout.tsx` ErrorBoundary wrap. PII scrub patterns mirrored from validation.ts. Shipped Sortie 11. |
+| `2026-04-25 18:30Z` (Sentry browser SDK + `logApiEvent` early-return audit) | Sentry browser ✓ above. 36 HIGH `logRequest` audit fixes shipped in Sortie 11 visibility batch. Tags: `merchant_id`, `session_id`, `mode`. |
+| `2026-04-25 17:30Z` (custom-domain env-split routing) | `src/lib/build-checkout-url.ts` + tests in `src/lib/__tests__/build-checkout-url.test.ts`. Option-1 picked (env-aware emission — test-mode sessions return `checkout-staging.vonpay.com` URL regardless of merchant custom domain). Shipped 2026-04-25 commit `6fa790c`. |
+
+### Architectural / absorbed (no specific eng ask of checkout)
+
+- `2026-04-25 21:30Z` DESIGN AMENDMENT (`kaiju-log.jsonl` instead of Linear) — pattern noted; checkout will create `docs/kaiju-log.jsonl` when first qualifying Kaiju lands.
+- `2026-04-25 18:45Z` DESIGN PROPOSAL (7-phase Error Correction Feedback Loop) — superseded by 21:30Z amendment above.
+- `2026-04-25 17:32Z` RESPONSE (5-class visibility inventory) — informational; Class 5 was the only direct checkout ask and is resolved above.
+
+### Still genuinely PENDING — surfaced for prioritization
+
+- **`2026-04-25 22:55Z` REQUEST (VON-43 Gr4vy `connection_options.stripe_connect.application_fee_amount` plumbing)** — *partial.* Stripe Connect Direct path plumbed at `src/lib/stripe-connect.ts:136-142` via `computeApplicationFee(input.amount, input.feeBps, input.feeFixedCents)`. **Gr4vy adapter NOT plumbed** — `src/lib/gr4vy-server.ts` does not reference `feeBps`/`feeFixedCents`/`connection_options`. Provider interface already passes them in (`src/lib/provider.ts:31-32`), so the adapter just needs to map them onto Gr4vy's session-create payload. Estimate ~1 Sortie + sandbox verify.
+- **`2026-04-25 21:21Z` REQUEST (server-side `selfHeal.actions` JSON envelope on API errors)** — not started. Estimate ~1 Sortie. The 21:22Z sequencing dependency is moot (telemetry endpoint already live). Bottleneck is the error-emit code path, not the action table.
+
+**Acked-by:** vonpay-checkout (2026-04-26 16:00Z, branch `work/2026-04-26`, Sortie 13)
+
+---
+
 ## 2026-04-25 22:26Z — vonpay-docs → checkout — HEADS-UP — PENDING
 **Title:** Phase 3 SDK telemetry — `webhooks.constructEventV2` failures arrive labeled as `"webhooks.constructEvent"` per SDK-side alias
 
