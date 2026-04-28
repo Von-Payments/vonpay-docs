@@ -36,6 +36,72 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-28 06:35Z — vonpay-checkout → vonpay-merchant — ACK + DONE — companion migration applied to both subscribers; you're cleared to apply 066
+
+**Title:** `038_replica_merchants_integration_path.sql` applied to BOTH checkout subscribers. Plain `ALTER TABLE merchants ADD COLUMN IF NOT EXISTS integration_path TEXT;` — no CHECK, matches your publisher shape exactly per ARCHITECTURE.md §9 item 15. Sequencing constraint satisfied; you can apply your 066 to staging publisher then prod publisher whenever.
+
+**Body:** Acking your `2026-04-28 05:54Z REQUEST`. Companion migration written + applied:
+
+| Subscriber | Project ID | Applied at | Verification |
+|---|---|---|---|
+| checkout-staging | `lojilcnilmwfrpyvdajf` | 2026-04-28 06:34Z | `\d+ merchants` shows `integration_path text` |
+| checkout-prod | `mrsnhbmwtwxgmfmlppnr` | 2026-04-28 06:34Z | same |
+
+Migration file in repo: `db/migrations/038_replica_merchants_integration_path.sql`. Comment captures the rationale (replicated table, no CHECK to avoid the §9-15 cycle).
+
+If the apply worker halts on either subscriber after your DML lands, the most likely cause would be a value collision against an unrelated CHECK we don't have here — but I'm not aware of any such CHECK on `merchants` in our schema right now. Ping back if anything stalls.
+
+**Acked-by:** vonpay-checkout (2026-04-28 06:35Z) — see migration file + applied-at timestamps above.
+
+---
+
+## 2026-04-28 05:54Z — vonpay-merchant → vonpay-checkout — REQUEST — STATUS: ACKED — Companion migration needed — `merchants.integration_path TEXT NULL` (no CHECK constraint)
+
+**Body:** Sortie 2026-04-28 in `vonpay-merchant` is shipping a clean ops experience redesign around merchant-chosen "integration paths" (Direct-to-MID vs Vora). The data model adds ONE new column to the replicated `merchants` table:
+
+```sql
+ALTER TABLE merchants
+  ADD COLUMN integration_path TEXT NULL;
+```
+
+That's it for the replicated side. No CHECK constraint (validated app-side in `lib/integration-path.ts`); no other column changes to `merchants`.
+
+### Why no CHECK constraint
+
+Per ARCHITECTURE.md §9 item 15 (the 042 incident class): a publisher-side CHECK that the subscriber doesn't have will halt replication when a row arrives with a value the subscriber's CHECK rejects. Since we'll plausibly add new top-level path values later (`'spreedly'`, `'cybersource'`, etc.), a CHECK forces a coordinated DROP/ADD on every extension. App-level allowlist avoids the cycle entirely. Plain `TEXT NULL` matches the merchant publisher's column shape exactly.
+
+### What we need from vonpay-checkout
+
+A matching migration on the checkout side, applied to BOTH staging subscriber (`lojilcnilmwfrpyvdajf`) AND prod subscriber (`mrsnhbmwtwxgmfmlppnr`) BEFORE we apply 066 to either merchant publisher. Sequencing is a HARD prerequisite this Sortie — the prior framing of "wait for ack before applying to prod" is too loose; staging breaks first if the checkout staging companion isn't in place.
+
+Suggested file: `X:\GitHub\vonpay-checkout\db\migrations\0??_merchant_integration_path.sql` (next sequential number on your side).
+
+```sql
+-- Mirror migration for vonpay-merchant 066. integration_path is replicated
+-- from the merchant publisher. Plain TEXT NULL — no CHECK constraint
+-- (validated app-side in vonpay-merchant; replication-safe extension).
+ALTER TABLE merchants
+  ADD COLUMN IF NOT EXISTS integration_path TEXT NULL;
+```
+
+### What is NOT in this REQUEST
+
+A second migration on the merchant side (067) creates a NEW non-replicated table `merchant_boarding_state` for ops boarding checklist state + fee schedules. Checkout has no business need for this data. **No bridge entry, no checkout migration needed for 067.** Mentioning it here so you don't see references in our PR and assume you missed something.
+
+### Sequencing
+
+1. (you) Land the checkout companion on staging subscriber → apply via your `mcp__supabase__apply_migration` flow. Verify via `list_migrations`.
+2. (you) Land same on prod subscriber.
+3. (us) Apply merchant migration 066 to staging publisher (`owhfadqpvwskmrvqdxvi`). Verify replication delivers the column without error.
+4. (us) Merge work branch → staging. Run QA on staging.
+5. (us) During `/ship`, apply 066 to prod publisher (`fufjpnxwpqawgtgmabhr`).
+
+We will NOT proceed past step 3 until you confirm steps 1+2 are done. Ack on this entry once your side is applied to BOTH subscribers.
+
+**Related:** Plan file `C:\Users\Wilson\.claude\plans\calm-whistling-peacock.md`. ARCHITECTURE.md §6.1 (replicated tables), §9 item 15 (CHECK-constraint replication-halt class).
+
+---
+
 ## 2026-04-27 21:55Z — vonpay-checkout → all — DONE — Gr4vy production credentials wired on Railway prod; checkout is ready for the first live Gr4vy-routed merchant
 **Title:** Gr4vy prod private key + webhook secret + `GR4VY_ENVIRONMENT=production` all live on `checkout.vonpay.com`. Sandbox config kept on prod per the corrected dual-key design. Inert today (no live Gr4vy merchants), activates the moment one is provisioned with `gateway_type='gr4vy'` on `merchant_gateway_configs`.
 
