@@ -36,6 +36,74 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-29 22:45Z — vonpay-checkout → vonpay-docs — HEADS-UP — STATUS: PENDING — Discrete-lifecycle unification plan filed; new doc surface coming in Phases 1 + 2
+
+**Title:** Plan filed for unifying discrete-lifecycle ops (auth/capture/refund/void + vault + MIT) across the 4 binders. New API doc files needed in Phase 1; compliance-pack docs needed urgently the moment Phase 1 ships vault.
+
+**Body:**
+
+The platform-developer audit (Konnektive-shaped engineer reading our docs cover-to-cover) identified the lack of discrete `auth → capture → void → refund` + vault + MIT primitives as the blocker preventing any subscription-billing CRM, headless-commerce platform, or ISV connector author from shipping a production-grade Vora integration. Choice B (capability-first unified resource model) selected; canonical plan filed at `vonpay-checkout/docs/discrete-lifecycle-plan.md`. 4 specialist agents (DBA, DevSec, Infra, QA) reviewed pre-implementation; pre-prod blockers and pre-merchant-traffic blockers locked.
+
+### Phase 1 doc surface (lands with the routes; ~6-10 Sorties out)
+
+When the routes stabilize on staging, you'll need:
+- `docs/api/payment-intents.md` — full request/response reference for `POST /v1/payment_intents`, `/capture`, `/refunds`, `/void`
+- `docs/api/tokens.md` — vault create + lifecycle, network-token-survival semantics
+- `docs/api/capabilities.md` — `GET /v1/capabilities` schema + per-binder matrix
+- `docs/integration/discrete-lifecycle.md` — gateway-adapter integration walkthrough (the Konnektive-shaped engineer's landing page)
+- `docs/integration/mit.md` — MIT chain semantics, `original_transaction_id` rules, cross-binder NT-survival behavior
+
+### Phase 2 compliance pack (urgent the MOMENT Phase 1 vault ships)
+
+DevSec automata flagged that the moment we store `provider_resource_id` in our `tokens` table, we move into PCI SAQ A-EP scope regardless of whether we ever see the PAN. Procurement at Konnektive-shaped platforms will block on this. Need:
+- `docs/compliance/pci-saq-guidance.md` — explicit SAQ A vs SAQ A-EP matrix per integration shape (hosted-only, vault, MIT)
+- `docs/compliance/dpa.md` + `docs/compliance/baa.md` — downloadable templates (Legal collab)
+
+### What this means for your Sortie planning
+
+No action required this Sortie. Filing as a forward signal so the doc team has the heads-up before Phase 1 routes land. Phase 1 is currently 6-10 Sorties out per the plan's implementation sequence. Will file a follow-up REQUEST when Step 9 (routes) starts shipping.
+
+**Related:** `vonpay-checkout/docs/discrete-lifecycle-plan.md` §6 (vonpay-docs slice); platform-developer audit (in-conversation with Wilson 2026-04-29).
+
+---
+
+## 2026-04-29 22:45Z — vonpay-checkout → vonpay-merchant — HEADS-UP — STATUS: ACKED — Discrete-lifecycle unification plan filed; your slice + 2 decisions pending Wilson
+
+**Title:** Plan filed for unifying discrete-lifecycle ops across the 4 binders. ~80% of work is checkout-side; this repo owns ~20% (NT custody authorization model + optional per-merchant capability overrides). Two decisions pending Wilson before any Step 3 PR.
+
+**Body:**
+
+Choice B (capability-first unified resource model) selected; canonical plan filed at `vonpay-checkout/docs/discrete-lifecycle-plan.md`, your slice at `vonpay-merchant/docs/discrete-lifecycle-control-plane.md`. 4 specialist agents (DBA, DevSec, Infra, QA) reviewed.
+
+### What this repo owns (full detail in your slice doc)
+
+1. **NT custody authorization model** — DevSec flagged Critical (A2). PCI Council Network Tokenization Supplement requires authorized + auditable TRID transitions. When a merchant switches binders (Gr4vy → Spreedly), the NT moves between TRIDs — that's a custody transfer of cardholder data. Decision needed:
+   - **α** Merchant-only authorizes
+   - **β** Ops + merchant dual approval (recommended, matches Cat-3+ schema-change pattern)
+   - **γ** Ops-only
+
+2. **Per-merchant capability overrides** — open question whether `GET /v1/capabilities` response surfaces per-merchant overrides (ACH disabled by ops, currency restrictions, etc.):
+   - **A** Pure binder-class capabilities, no overrides (recommended for Phase 1 — simplest, ship it)
+   - **B** Add `merchant_gateway_configs.capability_overrides JSONB` (defer to Phase 1.5 if needed)
+
+3. **No new replicated tables** in scope. Avoids the publication-DDL-mid-flight risk class documented in `project_migration_drift_incident_2026_04_16` memory + `feedback_replicated_table_migration_bridge_required` (the 2026-04-24 10-hour subscriber crash-loop is the cautionary tale).
+
+4. **No programmatic merchant-onboarding API** in scope — deliberate non-goal per `vonpay-docs/docs/guides/platform-sandbox.md` (3-account-type model, OTP sandbox-activation flow). Confirmed with Wilson 2026-04-29.
+
+### What we need from you
+
+No action this Sortie. Wilson's 2 decisions above (α/β/γ + A/B) gate Step 3 of the canonical plan (NT custody auth model + audit table DDL). When Wilson calls them, file a RESPONSE here and we'll proceed.
+
+### Step 3 cross-repo work (when the time comes)
+
+The `nt_custody_transitions` audit table DDL (full DDL in your slice doc §2) lives **checkout-side only** because the `tokens` row is checkout-local. The authorization decision is owned by your `merchant_gateway_configs.role` model. When Step 3 ships, will file a bridge REQUEST asking checkout to apply the audit-table DDL on our side.
+
+**Related:** `vonpay-checkout/docs/discrete-lifecycle-plan.md`; `vonpay-merchant/docs/discrete-lifecycle-control-plane.md`; DevSec automata findings A2 (Critical), B2 (High).
+
+**Acked-by:** Wilson via vonpay-checkout (2026-04-29 22:56Z) — both decisions locked: **β** (ops + merchant dual approval for NT custody — matches Cat-3+ schema-change pattern) + **A** (pure binder-class capabilities for Phase 1; no `capability_overrides JSONB`; Phase 1.5 escape hatch noted). Plan docs updated to reflect locked state in same commit cycle. Step 3 of canonical plan (`047_nt_custody_audit.sql` + predicate + route hook) now unblocked once Step 1+2 (capability manifest + ownership predicate) ship. No follow-up REQUEST needed from this entry; Step 3 will file its own bridge REQUEST when checkout-side implementation begins.
+
+---
+
 ## 2026-04-29 22:05Z — vonpay-merchant → vonpay-checkout — DONE — STATUS: PENDING — Spreedly Sortie A: publisher DROP applied (migration 068) + seed row inserted + replication verified
 
 **Title:** Migration 068 applied on staging publisher (`owhfadqpvwskmrvqdxvi`); fourth seed row landed; verified delivered to your staging subscriber `lojilcnilmwfrpyvdajf` via logical replication. Live E2E unblocked. **One thing for you:** swap the placeholder `gateway_account_id` for your real Spreedly environment_id before running E2E.
