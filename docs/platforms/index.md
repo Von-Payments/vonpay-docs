@@ -154,10 +154,19 @@ For getting set up with a sandbox in the first place — sign up at `app.vonpay.
 
 ## Reference adapter implementations
 
-Reference implementations of the connector pattern in PHP and Node.js are in flight. They will live at `github.com/vonpay/integration-adapters` (MIT-licensed) and demonstrate the full session lifecycle, webhook verification with constant-time HMAC, and `Idempotency-Key` handling against the sandbox. The PHP adapter targets the gateway-interface shape that Sticky.io / Konnektive / Limelight use; the Node adapter is the more general reference.
+A multi-tenant Node.js reference adapter is published at [`github.com/Von-Payments/vonpay-samples/tree/main/platform-integrator-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/platform-integrator-nextjs) (MIT-licensed). It demonstrates the full session lifecycle for a platform serving many merchants:
 
-:::info Coming soon
-The reference adapters are queued for a near-term Sortie. Until they ship, the [`samples/` directory in the SDK monorepo](https://github.com/vonpay/vonpay/tree/master/samples) shows the SDK-level surface (cart-redirect, pay-by-link, server-side webhook verification) — adapter-pattern repositories will reuse the same SDK calls.
+- Per-tenant credential lookup (each onboarded merchant has its own `vp_sk_*` + `ss_*` stored on the platform side; `lib/tenants.ts` is shaped like a real DB query)
+- Tenant-scoped session creation with `Idempotency-Key` and pinned `Von-Pay-Version`
+- Tenant-scoped return-URL signature verification (uses the right tenant's `ss_*`)
+- **Multi-tenant webhook routing** — single `/api/webhooks` endpoint receives events for all tenants, peeks at `merchantId` to route, then verifies HMAC with the tenant's `vp_sk_*`
+- Composite-key event idempotency dedup (Webhooks v1 doesn't emit a top-level event id; the sample composes `sessionId:event:timestamp` and stores in-memory — swap for Redis in production)
+- A small CRM-style UI with 3 simulated tenants → customers → "Charge $X" flow
+
+The general-purpose Node.js single-merchant samples ([`checkout-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-nextjs), [`checkout-express`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-express), [`checkout-paybylink-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-paybylink-nextjs)) cover the SDK surface against a single merchant if your platform ships its own multi-tenancy layer.
+
+:::info PHP adapter
+A PHP reference adapter targeting the gateway-interface shape that Sticky.io / Konnektive / Limelight use is on the roadmap. Until it ships, the Node adapter at `platform-integrator-nextjs` documents the same patterns; port them into your PHP gateway-adapter contract using the [REST API reference](../sdks/rest-api.md) directly, or use [`vonpay-checkout`](../sdks/python-sdk.md) (Python SDK) if your platform is Python-based.
 :::
 
 ## What's not in this spec yet
