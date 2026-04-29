@@ -289,7 +289,7 @@ Replace your test keys with live keys. That's it.
 - [Node SDK Reference](sdks/node-sdk.md) — Full API surface
 - [CLI Reference](sdks/cli.md) — Command-line tools
 - [Python SDK](sdks/python-sdk.md) — Python integration
-- [Sample Apps](https://github.com/vonpay/examples) — Working example integrations
+- [Sample Apps](https://github.com/Von-Payments/vonpay-samples) — Clone-and-run reference integrations: Next.js, Express, Flask, pay-by-link
 
 ### If you're building a platform/CRM connector
 

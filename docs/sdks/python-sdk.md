@@ -231,3 +231,13 @@ client = VonPayCheckout(
 ## Auto-Retry
 
 The SDK automatically retries on `429` (rate limited) and `5xx` (server error) responses using exponential backoff. Default is 2 retries; configure with the `max_retries` constructor argument.
+
+---
+
+## Sample app
+
+Clone-and-run reference integration using this SDK lives in [`Von-Payments/vonpay-samples`](https://github.com/Von-Payments/vonpay-samples):
+
+- [`checkout-flask`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-flask) — Flask hosted checkout with signed return verification + webhook handler
+
+Ships with `.env.example`, a per-sample README, and pinned to a known-working SDK version.

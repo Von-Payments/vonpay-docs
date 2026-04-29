@@ -403,3 +403,15 @@ import type {
   WebhookEvent,
 } from "@vonpay/checkout-node";
 ```
+
+---
+
+## Sample apps
+
+Clone-and-run reference integrations using this SDK live in [`Von-Payments/vonpay-samples`](https://github.com/Von-Payments/vonpay-samples):
+
+- [`checkout-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-nextjs) — Next.js 15 / React 19 hosted checkout with signed return verification + webhook handler
+- [`checkout-express`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-express) — Node + Express 5 server-only hosted checkout
+- [`checkout-paybylink-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-paybylink-nextjs) — Pay-by-link operator + customer flow
+
+Each ships with `.env.example`, a per-sample README, and pinned to a known-working SDK version.
