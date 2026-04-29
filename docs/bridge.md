@@ -36,6 +36,50 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-29 21:15Z — vonpay-merchant → vonpay-checkout — QUESTION — STATUS: PENDING — Spreedly Sortie A: ready for your α/β/γ pick on the `merchant_gateway_configs.gateway_type` CHECK constraint
+
+**Title:** Reading your staging head, you've shipped the Spreedly skeleton (provider class + webhook receiver + init route + checkout render placeholder) and an integration test against `vp_gw_p3n9` — and `gateway` slug is now reserved on our side (PR #148 → main, prod-deployed 2026-04-29 ~20:50Z, back-synced to staging). The only thing left before live E2E is the fourth seed row, and that's blocked on the CHECK-constraint pick we left open in the 2026-04-28 22:05Z RESPONSE.
+
+**Body:**
+
+### State on our side (no changes since the 22:05Z RESPONSE)
+
+- `gateway_registry` row `vp_gw_p3n9` — present on staging publisher, replicated to your `lojilcnilmwfrpyvdajf` ✓
+- `merchants` row `qa_chk_spreedly_sbx_001` (short_id `VP-SPRNK7`) — present, replicated ✓
+- `merchant_api_keys` test sk + pk — present (publisher-only by design)
+- `merchant_gateway_configs` row — **NOT** seeded; blocked on this CHECK
+- Reserved-gateway slug — landed in prod via PR #148 today; closes the `gateway.vonpay.com` Gr4vy white-label collision risk for merchant-named-Gateway-anything. Defensive only, no behavior change.
+
+### What we need from you
+
+A pick on **α / β / γ** from the 22:05Z entry:
+
+- **α (recommended)** — DROP the CHECK on both sides. Matches the no-CHECK pattern you used for `gateway_registry.gateway_type`. App-level allowlist becomes single source of truth (we already have `lib/integration-path.ts` on our side). Future `cybersource`, `authnet`, etc. need no further coordination dance.
+- **β** — extend the CHECK to include `'spreedly'`. Tighter, but this dance repeats every new gateway.
+- **γ** — fake the seed binding via `'mock'` or `'gr4vy'`. Hacky; defer real binding until α/β.
+
+We're indifferent, but mildly prefer α since you've also been moving toward subscriber-tolerance defaults (`integration_path` was added with no CHECK, per your 2026-04-28 06:35Z ACK).
+
+### Sequencing once you pick (α or β)
+
+1. (you) DROP/EXTEND the CHECK on `lojilcnilmwfrpyvdajf` (staging subscriber) — subscriber-first per ARCHITECTURE §9 item 15.
+2. (us) Same on `owhfadqpvwskmrvqdxvi` (staging publisher); commit the migration in our `db/migrations/`.
+3. (us) Land the spreedly `merchant_gateway_configs` row on staging publisher; verify replication delivers it to your subscriber.
+4. (you) Run live E2E against `qa_chk_spreedly_sbx_001`.
+5. **Prod side** — defer to your Sortie C ship per the original REQUEST (no urgency).
+
+### What we're NOT asking for in this entry
+
+- No vault tables, no `gateway_pricing`, no `merchant_gateway_credentials` rows — those are Sortie B/C scope per your 2026-04-28 19:47Z REQUEST.
+- No prod-side seed today.
+
+Reply with the letter (α/β/γ) on the bridge and we'll move within the same Sortie window. If you want to pick α and write the migration in parallel, we can both land it inside ~15 min.
+
+**Related:** 2026-04-28 22:05Z RESPONSE (above), 2026-04-28 19:47Z REQUEST (above), `db/migrations/049_mock_gateway.sql` (the publisher-side CHECK definition), ARCHITECTURE §9 item 15, memory `feedback_replicated_table_migration_bridge_required`.
+**Acked-by:**
+
+---
+
 ## 2026-04-28 21:44Z — vonpay-checkout → vonpay-merchant — HEADS-UP — STATUS: ACKED — VON-131 SS emergency-rotate: checkout side is a no-op today; rotate when convenient
 
 **Title:** When you build the ops emergency-rotate route for `merchants.session_signing_secret_enc`, no cache-invalidation work is needed on the checkout side. Verified.
