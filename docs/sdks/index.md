@@ -4,7 +4,7 @@ sidebar_position: 0
 
 # SDKs & Tools
 
-Von Payments ships client libraries and developer tools for the environments integrators most commonly work in. All 4 packages at `0.3.0` — server SDKs (Node + Python) with 27-code `ErrorCode` union, programmatic self-heal helpers (`retryable` / `nextAction` / `llmHint` on every error), opt-in `errorReporter` callback for piping into Sentry/Datadog, opt-in Stripe-strict `constructEventV2` / `construct_event_v2`. The CLI ships `vonpay checkout doctor` for one-command diagnostic bundles; the MCP server adds a `diagnose_error` tool for AI agents. All source-linked to the [Von Payments monorepo](https://github.com/Von-Payments/vonpay).
+Von Payments ships client libraries and developer tools for the environments integrators most commonly work in. All 4 packages at `0.3.0` — server SDKs (Node + Python) with 27-code `ErrorCode` union, programmatic self-heal helpers (`retryable` / `nextAction` / `llmHint` on every error), opt-in `errorReporter` callback for piping into your APM or error-tracking platform, opt-in strict-mode `constructEventV2` / `construct_event_v2`. The CLI ships `vonpay checkout doctor` for one-command diagnostic bundles; the MCP server adds a `diagnose_error` tool for AI agents.
 
 ## Server-side SDKs
 

@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Integrate Vora as a Payment Gateway
 
-A one-page reference for platform engineering teams building a Von Payments connector inside their product. Audience: you've already had the partnership conversation (or you're scoping work before one) and you want the API surface mapped against the gateway-adapter shape your platform already uses for Stripe / NMI / Authorize.Net.
+A one-page reference for platform engineering teams building a Von Payments connector inside their product. Audience: you've already had the partnership conversation (or you're scoping work before one) and you want the API surface mapped against the gateway-adapter shape your platform already uses for other third-party gateways.
 
 Everything on this page is what's live today. Sections that depend on near-term checkout work are flagged explicitly — don't build against them yet.
 
@@ -148,7 +148,7 @@ For dev-loop testing your connector, every Von Payments merchant has a sandbox e
 | `200` | Card declined (`card_declined`) | `session.failed` with `failureCode: card_declined` |
 | Any other | Payment succeeds | `session.succeeded` with `transactionId` |
 
-The mock gateway is intentionally narrow — one decline trigger, otherwise approve. For richer card-acceptance testing (3DS challenges, issuer-specific declines, timeouts), board a real Stripe Connect test-mode account or Gr4vy sandbox onto your sandbox merchant. Both provide their full test-card catalogs without real funds movement.
+The mock gateway is intentionally narrow — one decline trigger, otherwise approve. For richer card-acceptance testing (3DS challenges, issuer-specific declines, timeouts), board a real third-party gateway test-mode account onto your sandbox merchant — see your account manager for the supported providers and the test-card catalog each one ships with.
 
 For getting set up with a sandbox in the first place — sign up at `app.vonpay.com`, click *Activate Vora Sandbox* — see the [Platform Integrator Sandbox guide](../guides/platform-sandbox.md).
 
@@ -166,7 +166,7 @@ A multi-tenant Node.js reference adapter is published at [`github.com/Von-Paymen
 The general-purpose Node.js single-merchant samples ([`checkout-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-nextjs), [`checkout-express`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-express), [`checkout-paybylink-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-paybylink-nextjs)) cover the SDK surface against a single merchant if your platform ships its own multi-tenancy layer.
 
 :::info PHP adapter
-A PHP reference adapter targeting the gateway-interface shape that Sticky.io / Konnektive / Limelight use is on the roadmap. Until it ships, the Node adapter at `platform-integrator-nextjs` documents the same patterns; port them into your PHP gateway-adapter contract using the [REST API reference](../sdks/rest-api.md) directly, or use [`vonpay-checkout`](../sdks/python-sdk.md) (Python SDK) if your platform is Python-based.
+A PHP reference adapter targeting the gateway-interface shape used by subscription-billing CRMs is on the roadmap. Until it ships, the Node adapter at `platform-integrator-nextjs` documents the same patterns; port them into your PHP gateway-adapter contract using the [REST API reference](../sdks/rest-api.md) directly, or use [`vonpay-checkout`](../sdks/python-sdk.md) (Python SDK) if your platform is Python-based.
 :::
 
 ## What's not in this spec yet
@@ -182,7 +182,7 @@ These are real, but the public surface for them is in flight. Don't build agains
 
 The work above is what your platform's eng team builds. The work that gets your connector listed in your platform's gateway dropdown is a separate biz-dev partnership conversation:
 
-- We list Von Payments in your platform's gateway-config UI alongside Stripe / NMI / Authorize.Net.
+- We list Von Payments in your platform's gateway-config UI alongside the other gateways you support.
 - Our sales team routes deal flow to merchants who use your platform.
 - Rev-share terms and a support channel are agreed in writing.
 
