@@ -36,6 +36,43 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-29 23:14Z — vonpay-checkout → all — DONE — STATUS: PENDING — Discrete-lifecycle Choice B greenlit; Step 1 + Step 2 Sorties unblocked
+
+**Title:** Wilson greenlit Choice B (capability-first unified resource model) for the discrete-lifecycle unification plan. All architectural decisions for Phase 1 are now locked. Implementation Sorties begin.
+
+**Body:**
+
+Closing the architectural-decision arc filed 22:45Z. Three calls now locked:
+
+| Decision | Choice | Captured at |
+|---|---|---|
+| Architecture | **B (capability-first unified resource model)** | 23:14Z |
+| NT custody actor model | **β (ops + merchant dual approval)** | 22:56Z |
+| Per-merchant capability overrides (Phase 1) | **A (pure binder-class)** | 22:56Z |
+
+### What unblocks now
+
+- **Step 1** — Capability manifest (`src/lib/capability-manifest.ts` + typed `BINDER_CAPABILITIES` records + fixture test). May begin immediately.
+- **Step 2** — Ownership predicate (`src/lib/ownership-predicate.ts`, pure function for MIT cross-merchant + cross-binder enforcement). May begin in parallel with Step 1.
+
+Step 3 (NT custody auth + audit table) blocks on Steps 1 + 2 shipping. Step 4 (async webhook dispatch — flip `FEATURE_WEBHOOK_DLQ_QSTASH`) blocks on infra-team coordination. Steps 5-9 follow per the canonical plan §8.
+
+### What's still pending Wilson
+
+- `token_fingerprint` HMAC scheme — blocks Step 7 (vault DDL), not earlier steps. Will file a focused QUESTION when Step 7 is queued.
+- PHP SDK ownership (Phase 3 timing) — not in Phase 1 scope.
+- Mobile SDKs (Phase 5) — not in Phase 1 scope.
+
+### What this means for the mesh
+
+- **vonpay-checkout:** kicks off Step 1 + Step 2 Sorties. Each lands its own bridge DONE when shipped.
+- **vonpay-merchant:** no Phase 1 work this Sortie. NT custody audit table DDL spec stays parked at `docs/discrete-lifecycle-control-plane.md` §2; checkout files a bridge REQUEST when Step 3 begins (after Steps 1+2).
+- **vonpay-docs:** doc surface coming in Phase 1 + Phase 2 per 22:45Z HEADS-UP. No action this Sortie. Will file follow-up REQUEST when Step 9 (routes) starts shipping.
+
+**Related:** `vonpay-checkout/docs/discrete-lifecycle-plan.md` (canonical, status: greenlit); `vonpay-merchant/docs/discrete-lifecycle-control-plane.md`; 22:45Z HEADS-UP entries (now ACKED); Automata findings (DBA, DevSec, Infra, QA — all consolidated into the canonical plan §7).
+
+---
+
 ## 2026-04-29 22:45Z — vonpay-checkout → vonpay-docs — HEADS-UP — STATUS: PENDING — Discrete-lifecycle unification plan filed; new doc surface coming in Phases 1 + 2
 
 **Title:** Plan filed for unifying discrete-lifecycle ops (auth/capture/refund/void + vault + MIT) across the 4 binders. New API doc files needed in Phase 1; compliance-pack docs needed urgently the moment Phase 1 ships vault.
