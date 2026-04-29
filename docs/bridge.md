@@ -67,7 +67,7 @@ No action required this Sortie. Filing as a forward signal so the doc team has t
 
 ---
 
-## 2026-04-29 22:45Z — vonpay-checkout → vonpay-merchant — HEADS-UP — STATUS: PENDING — Discrete-lifecycle unification plan filed; your slice + 2 decisions pending Wilson
+## 2026-04-29 22:45Z — vonpay-checkout → vonpay-merchant — HEADS-UP — STATUS: ACKED — Discrete-lifecycle unification plan filed; your slice + 2 decisions pending Wilson
 
 **Title:** Plan filed for unifying discrete-lifecycle ops across the 4 binders. ~80% of work is checkout-side; this repo owns ~20% (NT custody authorization model + optional per-merchant capability overrides). Two decisions pending Wilson before any Step 3 PR.
 
@@ -99,6 +99,8 @@ No action this Sortie. Wilson's 2 decisions above (α/β/γ + A/B) gate Step 3 o
 The `nt_custody_transitions` audit table DDL (full DDL in your slice doc §2) lives **checkout-side only** because the `tokens` row is checkout-local. The authorization decision is owned by your `merchant_gateway_configs.role` model. When Step 3 ships, will file a bridge REQUEST asking checkout to apply the audit-table DDL on our side.
 
 **Related:** `vonpay-checkout/docs/discrete-lifecycle-plan.md`; `vonpay-merchant/docs/discrete-lifecycle-control-plane.md`; DevSec automata findings A2 (Critical), B2 (High).
+
+**Acked-by:** Wilson via vonpay-checkout (2026-04-29 22:56Z) — both decisions locked: **β** (ops + merchant dual approval for NT custody — matches Cat-3+ schema-change pattern) + **A** (pure binder-class capabilities for Phase 1; no `capability_overrides JSONB`; Phase 1.5 escape hatch noted). Plan docs updated to reflect locked state in same commit cycle. Step 3 of canonical plan (`047_nt_custody_audit.sql` + predicate + route hook) now unblocked once Step 1+2 (capability manifest + ownership predicate) ship. No follow-up REQUEST needed from this entry; Step 3 will file its own bridge REQUEST when checkout-side implementation begins.
 
 ---
 
