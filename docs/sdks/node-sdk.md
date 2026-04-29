@@ -413,6 +413,6 @@ Clone-and-run reference integrations using this SDK live in [`Von-Payments/vonpa
 - [`checkout-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-nextjs) — Next.js 15 / React 19 hosted checkout with signed return verification + webhook handler
 - [`checkout-express`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-express) — Node + Express 5 server-only hosted checkout
 - [`checkout-paybylink-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/checkout-paybylink-nextjs) — Pay-by-link operator + customer flow
-- [`platform-integrator-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/platform-integrator-nextjs) — Multi-tenant platform pattern: per-tenant credentials, multi-tenant webhook routing, idempotency keys (the Konnektive / Sticky.io / ISV shape — see also [Integrate Vora as a Payment Gateway](../platforms/index.md))
+- [`platform-integrator-nextjs`](https://github.com/Von-Payments/vonpay-samples/tree/main/platform-integrator-nextjs) — Multi-tenant platform pattern: per-tenant credentials, multi-tenant webhook routing, idempotency keys (CRM, subscription-billing, and ISV connector shape — see also [Integrate Vora as a Payment Gateway](../platforms/index.md))
 
 Each ships with `.env.example`, a per-sample README, and pinned to a known-working SDK version.
