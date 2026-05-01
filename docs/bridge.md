@@ -36,6 +36,159 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-05-01 00:40Z — vonpay-docs → all — HEADS-UP — STATUS: PENDING — Project codename: Mark IV (covers Track A binder unification + Track B SDK language coverage)
+
+**Title:** The combined plan filed 2026-04-30 22:26Z (canonical: `vonpay-checkout/docs/discrete-lifecycle-plan.md` §8 + §9) now has a codename. Use it in commits, PRs, bridge entries, and Sortie debriefs going forward.
+
+**Body:**
+
+The two tracks share one source-of-truth doc and share repos (vonpay-docs, vonpay/sdk, vonpay-samples). Treating them as separate projects has caused naming drift in commit prefixes and PR titles. Codename them as one project:
+
+### Codename: **Mark IV**
+
+Pacific Rim canon: a "Mark" designation specifies a generational Jaeger platform. Mark IV = next-generation Vonpay platform spec. Sits next to existing lexicon: Jaeger (repo), Drift (sync), Sortie (work session), Kaiju (issue), Assay (QA), Automata (specialist agent).
+
+| Sub-track | Scope | Primary owner |
+|---|---|---|
+| **Mark IV / Track A** — Binder Rail | Discrete-lifecycle Choice B unification (`/v1/payment_intents`, `/capture`, `/refunds`, `/void`, `/tokens`, `/capabilities` against 5 binders). Steps 1–9 per `discrete-lifecycle-plan.md` §8. | vonpay-checkout |
+| **Mark IV / Track B** — Language Rail | SDK language coverage — PHP + Ruby (Phase 3) + mobile native or webview (Phase 5). Plus Phase 2 compliance pack + Phase 4 platforms listing per `discrete-lifecycle-plan.md` §9. | vonpay (monorepo) for SDKs / vonpay-docs for compliance + platforms / vonpay-www for marketing surface |
+
+### Conventions going forward
+
+- **Commit prefixes** — `feat(mark-iv-a): ...` for Track A work, `feat(mark-iv-b): ...` for Track B. Existing `feat(lifecycle): ...` and `feat(sdk): ...` prefixes remain valid for sub-system commits; reserve the codename prefix for cross-track or coordinator commits.
+- **PR titles** — include `[Mark IV/A]` or `[Mark IV/B]` prefix when the PR sits at the intersection of multiple repos. Single-repo PRs that don't need cross-repo coordination can skip it.
+- **Bridge entries** — when filing a new bridge entry that references the plan, use "Mark IV" in the title field rather than "discrete-lifecycle plan" or "developer gap plan." Both legacy names still work; codename is the preferred forward form.
+- **Memory files** — new memory files about this project use prefix `project_mark_iv_*.md`. Existing files (`project_phase_a_publish_done.md`, etc.) stay as-is to preserve search continuity.
+- **Sortie debriefs** — at /close, when summarizing Mark IV work, use the format `Mark IV / Track {A,B} / Step {N}` so /drift can ingest progress unambiguously.
+
+### What does not change
+
+- Source-of-truth doc remains `vonpay-checkout/docs/discrete-lifecycle-plan.md`. No file rename. The codename is in the *header* of that doc going forward (vonpay-checkout to add a `# Mark IV — Discrete-Lifecycle Unification & SDK Coverage` H1 above the existing `## 1. Background` section).
+- Open Wilson decisions (Q1 HMAC scheme, Q2 PHP origin, Q3 mobile native vs webview, Q4 Step 3+4 batching) are renamed in spirit only — they're now Mark IV Q1–Q4.
+- Phase numbering in `discrete-lifecycle-plan.md` §9 is unchanged. Phase 1 = Track A. Phases 2–5 = Track B subdivisions.
+
+### Asks
+
+- **vonpay-checkout** — at next /drift, add `# Mark IV` H1 to `docs/discrete-lifecycle-plan.md` and mirror this entry to your bridge.md.
+- **vonpay-merchant** — at next /drift, mirror this entry to your bridge.md and adopt `Mark IV / Track A / Step 3+` prefixes in commits going forward.
+- **vonpay-docs** — already canonical; this entry is filed here. Phase 2 (compliance pack) commits to use `docs(mark-iv-b/phase-2): ...` prefix when work begins.
+- **vonpay-www** — observer-tier; adopt `Mark IV / Track B / Phase 4` prefix when /platforms listing work starts.
+- **vonpay (SDK monorepo)** — observer-tier; today's 0.4.1 patch was sub-system; future SDK work that's part of Mark IV (PHP/Ruby scaffolding, 1.0.0 typed clients) gets the codename prefix.
+
+**Acked-by:** *(awaiting sibling /drift)*
+
+**Related:** `vonpay-checkout/docs/discrete-lifecycle-plan.md`; bridge entry 2026-04-30 22:26Z (plan ownership map); memory `project_bridge_ownership_scope.md`; memory `session_2026_04_30.md`.
+
+---
+## 2026-05-01 00:12Z — vonpay (monorepo) → vonpay-checkout — DONE — STATUS: PENDING — `rk_(live|test)_*` Stripe restricted-key blocklist parity SHIPPED in `@vonpay/checkout-node@0.4.1` + `vonpay-checkout==0.4.1`
+
+**Title:** Closing the 2026-04-26 03:57Z HEADS-UP. Server-side `validation.ts:100` shipped the `rk_*` pattern earlier; SDK side now byte-matches in both Node and Python clients. Both packages live on npm + PyPI as of 2026-05-01 ~22:13Z.
+
+**Body:**
+
+The Phase 3 SDK telemetry blocklist (added in 0.4.0) was missing the Stripe restricted-key prefix `rk_(live|test)_*`. Server-side filed at `vonpay-checkout/src/lib/validation.ts:100` per HEADS-UP `2026-04-26 03:57Z`; SDK side was deferred to 0.4.1 to preserve the byte-for-byte parity claim.
+
+### What shipped
+
+- **`@vonpay/checkout-node@0.4.1`** (npm) — `BLOCKLIST` array gains `/rk_(live|test)_[a-z0-9]+/i` at `packages/checkout-node/src/telemetry.ts:49`. Test suite 117 → 118 (positive assertion + embedded-string assertion `bearer rk_live_abc123 in header`).
+- **`vonpay-checkout==0.4.1`** (PyPI) — matching `re.compile(r"rk_(live|test)_[a-z0-9]+", re.IGNORECASE)` at `packages/checkout-python/src/vonpay/checkout/telemetry.py:62`. Test suite 89 → 90.
+- Verified live on registries: `npm view @vonpay/checkout-node` → 0.4.1; `pip index versions vonpay-checkout` → 0.4.1.
+
+### Specialist review (4 agents, before commit)
+
+| Agent | Findings |
+|---|---|
+| code-reviewer | 0 |
+| devsec | 0 HIGH/MEDIUM (2 LOWs noted, gold-plating skipped) |
+| qa | 1 MEDIUM (no embedded-string assertion for `rk_`) — folded in before commit |
+| infra | 1 LOW (stale `SDK_VERSION = "0.4.0"` constant in `telemetry.test.ts:12`) — fixed |
+
+### Cross-repo state
+
+- vonpay (monorepo) PR #3: merged to master at `035ab80`.
+- npm publish workflow: run 25191636194 ✓ success.
+- PyPI publish workflow: run 25191678372 ✓ success.
+- Tag-push protocol per memory `feedback_tag_push_after_branch`: pushed individually with publish-workflow confirmation between.
+
+### Ask of vonpay-checkout
+
+Flip `STATUS: ACKED` or `RESOLVED` on the 2026-04-26 03:57Z HEADS-UP entry on your next /drift. No further action required from your side.
+
+**Acked-by:** *(awaiting vonpay-checkout /drift)*
+
+**Related:** vonpay (monorepo) PR #3; npm @vonpay/checkout-node@0.4.1; PyPI vonpay-checkout==0.4.1; bridge HEADS-UP `2026-04-26 03:57Z`; memory `session_2026_04_25c.md` §"Kaiju deferred"; memory `project_bridge_ownership_scope.md`.
+
+---
+## 2026-04-30 22:26Z — vonpay-checkout → all — HEADS-UP — STATUS: PENDING — Plan ownership map: API binder (Choice B) + developer-gap (PHP/Ruby/mobile SDK) tracks
+
+**Title:** Single source of truth for who owns what across the discrete-lifecycle Phase-1 binder build AND the Phase-3/Phase-5 SDK language-coverage track. Two parallel arcs share repos; without explicit ownership we will collide on `vonpay-docs`, `vonpay/sdk`, and the `vonpay-samples` build matrix.
+
+**Body:**
+
+Two plans, same source doc (`vonpay-checkout/docs/discrete-lifecycle-plan.md` §8 + §9). State as of 2026-04-30 22:26Z:
+
+### Track A — API binder unification (Phase 1, Steps 1–9)
+
+Plan: §8 of `discrete-lifecycle-plan.md`. Goal: ship `POST /v1/payment_intents`, `/capture`, `/refunds`, `/void`, `POST /v1/tokens`, `GET /v1/capabilities` against 5 binders (Gr4vy live, Stripe Connect live, Spreedly skeleton, Aspire queued, sandbox) behind a typed `BINDER_CAPABILITIES` manifest.
+
+| Step | Status | Primary owner | Secondary | Notes |
+|---|---|---|---|---|
+| 1 — Capability manifest (`src/lib/capability-manifest.ts`) | ✅ shipped (PR #96, 2026-04-30) | vonpay-checkout | — | 46 unit tests; `getCapabilities` + `assertCapability` + `CapabilityNotSupportedError` exported |
+| 2 — Ownership predicate (`src/lib/ownership-predicate.ts`) | ✅ shipped (PR #96, 2026-04-30) | vonpay-checkout | — | `assertPaymentIntentOwnership` + `checkMITChainValidity` + `httpStatusForMITReject` |
+| 3 — NT custody auth + `047_nt_custody_audit.sql` | ⏳ unblocked | vonpay-checkout (predicate + route) | vonpay-merchant (audit-table DDL spec'd in `discrete-lifecycle-control-plane.md` §2) | Wilson decision pending: launch alone or batch with Step 4 |
+| 4 — Async webhook dispatch (flip `FEATURE_WEBHOOK_DLQ_QSTASH`, move `webhook-delivery.ts:307` `Promise.allSettled` off hot path) | ⏳ unblocked | vonpay-checkout | infra owner (Railway env var flip + Upstash QStash provisioning) | Parallelizable with Step 3 |
+| 5 — Trust-boundary scrubber (extend `SCRUB_KEYS` + `provider_event` policy + decline-code allowlist) | ⏳ blocks on Step 3 | vonpay-checkout | — | Closes B1, C4 |
+| 6 — Per-merchant binder egress rate-limit (`binder_egress:{gatewayType}:{merchantId}` Upstash bucket) | ⏳ blocks on Step 4 | vonpay-checkout | infra owner | Closes B3 |
+| 7 — Vault DDL + 2-layer encryption envelope (`043_tokens_vault.sql` + `token_fingerprint` HMAC) | ⏳ blocks on Wilson HMAC-scheme decision | vonpay-checkout (DDL + crypto) | vonpay-merchant (KEK custody runbook) | Decision Q1 below |
+| 8 — Explicit event routing table (`reconcile-dispatch.ts` rewrite) | ⏳ blocks on Step 5 | vonpay-checkout | — | Closes B4 |
+| 9 — Public routes (`/v1/payment_intents`, `/capture`, `/refunds`, `/void`, `/tokens`, `/capabilities`) | ⏳ blocks on 1–8 | vonpay-checkout (server) | vonpay-docs (`docs/api/*` + OpenAPI), vonpay/sdk (typed clients, 1.0.0 candidate) | Public surface — last |
+
+**Cross-repo touch points for Track A:**
+- **vonpay-merchant** — owns the *control plane* slice (`discrete-lifecycle-control-plane.md`): NT custody actor enum, audit table reads, ops-side approval UI for β actor model, KEK custody runbook for Step 7. ~20% of the work per the slice doc.
+- **vonpay-docs** — once Step 9 lands, owns `docs/api/payment-intents.md`, `docs/api/tokens.md`, `docs/api/capabilities.md`, OpenAPI spec drift-check, decline-code reference table.
+- **vonpay (SDK monorepo)** — once Step 9 lands, ships `@vonpay/checkout-node@1.0.0` and `vonpay-checkout==1.0.0` with typed `paymentIntents.{create,capture,refund,void}` + `tokens.create` + `capabilities.retrieve`. Major-version bump signals discrete-lifecycle GA.
+- **vonpay-samples** — owns the new `samples-vonpay/discrete-lifecycle-nextjs/` clone-and-run. Built against SDK 1.0.0 once it lands.
+
+### Track B — Developer-gap (SDK language coverage)
+
+Plan: §9 of `discrete-lifecycle-plan.md`. Goal: cover languages we don't yet ship — PHP, Ruby, native mobile (iOS/Android) — so integrators outside the Node/Python ecosystem aren't forced into hand-rolling REST clients.
+
+| Phase | Scope | Status | Primary owner | Secondary | Notes |
+|---|---|---|---|---|---|
+| 1 | Choice B unification (= Track A above) | 🟢 in-flight | vonpay-checkout | — | Track A |
+| 2 | Compliance pack (PCI SAQ A vs SAQ A-EP guidance, BAA template, DPA template) | ⏳ not started | vonpay-docs | Legal | `docs/compliance/{pci-saq-guidance,baa,dpa}.md`. Urgent the moment Choice B vault ships (procurement gate). |
+| **3** | **PHP + Ruby SDKs** (port REST contract) | ⏳ not started | **vonpay/sdk (new sub-packages)** | vonpay-docs (sdks/*) | Decision Q2 below: hand-port from `@vonpay/checkout-node` semantics or codegen from OpenAPI. Half of CRM market is PHP; Shopify ecosystem is Ruby. |
+| 4 | `vonpay-www/platforms` listing page + biz-dev partner-tier docs | 🟡 partial | vonpay-www | vonpay-docs | `vonpay-docs/docs/platforms/index.md` + sample landed 2026-04-25; `vonpay-www` listing page still missing (observer-tier on bridge). |
+| **5** | **Status page + public SLA + mobile SDKs** | ⏳ not started | infra (status + SLA), **new repos** (mobile SDKs) | Legal (SLA), vonpay-docs (sdks/{ios,android}) | Decision Q3 below: webview-on-hosted-checkout interim, or native iOS+Android. Driven by partner-platform demand signal. |
+
+**Cross-repo touch points for Track B:**
+- **vonpay-docs** — Phases 2, 3, 4, 5 all land doc surfaces here. Sequencing: compliance docs (Phase 2) precede SDK docs (Phase 3) precede mobile docs (Phase 5).
+- **vonpay (SDK monorepo)** — Phase 3 spawns 2 new sub-packages (`@vonpay/checkout-php`, `@vonpay/checkout-ruby`). Adds publish workflows for Packagist + RubyGems. Telemetry blocklist parity (per the 2026-04-26 03:57Z Stripe `rk_*` HEADS-UP — closed today by 0.4.1) must be ported byte-equivalent to PHP and Ruby.
+- **vonpay-www** — Phase 4 owns the public `/platforms` listing page (observer-tier, pulls from `vonpay-docs/docs/platforms/index.md`).
+- **New repos** — Phase 5 mobile SDKs are prospective (`vonpay-checkout-ios`, `vonpay-checkout-android`) if Wilson decides native; otherwise webview-on-hosted-checkout requires no new repo.
+
+### Open Wilson decisions (gating items above)
+
+| Q | Question | Gates | Status |
+|---|---|---|---|
+| Q1 | `token_fingerprint` HMAC scheme — same key as `email_lookup_hash` in `041_buyers_table.sql` (per-merchant DEK derivation), or separate global key? | Track A Step 7 (vault DDL) | Pending |
+| Q2 | PHP SDK origin — hand-port from `@vonpay/checkout-node` semantics, or codegen from OpenAPI? | Track B Phase 3 ownership + cadence | Pending |
+| Q3 | Mobile SDKs — native iOS+Android (new repos), or webview-on-hosted-checkout (no new repos)? | Track B Phase 5 ownership + scope | Pending |
+| Q4 | Step 3 launch — solo Sortie, or batched with Step 4 in parallel? | Track A near-term sequencing | Pending |
+
+### What I need from each repo at next /drift
+
+- **vonpay-merchant** — confirm slice ownership for Step 3 audit-table DDL is still on your roadmap; flag if the dual-approval (β) UI surface needs more than the slice doc currently scopes.
+- **vonpay-docs** — confirm Phase 2 (compliance pack) is queued behind Step 9 of Track A on your side, OR if Legal wants Phase 2 to land before vault ships.
+- **vonpay (SDK monorepo)** — already aligned today (0.4.1 shipped). Phase 3 (PHP+Ruby) is post-Track-A, no immediate action; flag if you want to start scaffolding PHP repo skeleton now while Q2 is undecided.
+- **vonpay-www / vonpay-samples** — observer-tier; act on Phase 4 (`/platforms` listing) when Track A signals approach Step 9.
+
+**Acked-by:** *(awaiting sibling /drift)*
+
+**Related:** `vonpay-checkout/docs/discrete-lifecycle-plan.md` §8 + §9 + §10; PR #96 (Steps 1+2); 2026-04-29 23:14Z bridge entry below; memory `session_2026_04_30.md`; 2026-04-26 03:57Z `rk_` Stripe HEADS-UP closed by `vonpay@0.4.1` today.
+
+---
+
 ## 2026-04-30 23:55Z — vonpay-merchant → all — INCIDENT — STATUS: RESOLVED — Bridge parity recovered: 22:26Z mirror PRs branched from stale bases, would have dropped 5 entries on merge; canonical reconciled
 
 **Title:** Three parallel mirror PRs (merchant #157, docs #20, checkout `docs/bridge-2026-04-30-plan-ownership-map`) for the 22:26Z plan ownership map all branched from stale bases. If merged as-is, each repo would have ended up with a different bridge state. Canonical reconciled this Sortie.
