@@ -36,6 +36,52 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-05-01 00:40Z — vonpay-docs → all — HEADS-UP — STATUS: PENDING — Project codename: Mark IV (covers Track A binder unification + Track B SDK language coverage)
+
+**Title:** The combined plan filed 2026-04-30 22:26Z (canonical: `vonpay-checkout/docs/discrete-lifecycle-plan.md` §8 + §9) now has a codename. Use it in commits, PRs, bridge entries, and Sortie debriefs going forward.
+
+**Body:**
+
+The two tracks share one source-of-truth doc and share repos (vonpay-docs, vonpay/sdk, vonpay-samples). Treating them as separate projects has caused naming drift in commit prefixes and PR titles. Codename them as one project:
+
+### Codename: **Mark IV**
+
+Pacific Rim canon: a "Mark" designation specifies a generational Jaeger platform. Mark IV = next-generation Vonpay platform spec. Sits next to existing lexicon: Jaeger (repo), Drift (sync), Sortie (work session), Kaiju (issue), Assay (QA), Automata (specialist agent).
+
+| Sub-track | Scope | Primary owner |
+|---|---|---|
+| **Mark IV / Track A** — Binder Rail | Discrete-lifecycle Choice B unification (`/v1/payment_intents`, `/capture`, `/refunds`, `/void`, `/tokens`, `/capabilities` against 5 binders). Steps 1–9 per `discrete-lifecycle-plan.md` §8. | vonpay-checkout |
+| **Mark IV / Track B** — Language Rail | SDK language coverage — PHP + Ruby (Phase 3) + mobile native or webview (Phase 5). Plus Phase 2 compliance pack + Phase 4 platforms listing per `discrete-lifecycle-plan.md` §9. | vonpay (monorepo) for SDKs / vonpay-docs for compliance + platforms / vonpay-www for marketing surface |
+
+### Conventions going forward
+
+- **Commit prefixes** — `feat(mark-iv-a): ...` for Track A work, `feat(mark-iv-b): ...` for Track B. Existing `feat(lifecycle): ...` and `feat(sdk): ...` prefixes remain valid for sub-system commits; reserve the codename prefix for cross-track or coordinator commits.
+- **PR titles** — include `[Mark IV/A]` or `[Mark IV/B]` prefix when the PR sits at the intersection of multiple repos. Single-repo PRs that don't need cross-repo coordination can skip it.
+- **Bridge entries** — when filing a new bridge entry that references the plan, use "Mark IV" in the title field rather than "discrete-lifecycle plan" or "developer gap plan." Both legacy names still work; codename is the preferred forward form.
+- **Memory files** — new memory files about this project use prefix `project_mark_iv_*.md`. Existing files (`project_phase_a_publish_done.md`, etc.) stay as-is to preserve search continuity.
+- **Sortie debriefs** — at /close, when summarizing Mark IV work, use the format `Mark IV / Track {A,B} / Step {N}` so /drift can ingest progress unambiguously.
+
+### What does not change
+
+- Source-of-truth doc remains `vonpay-checkout/docs/discrete-lifecycle-plan.md`. No file rename. The codename is in the *header* of that doc going forward (vonpay-checkout to add a `# Mark IV — Discrete-Lifecycle Unification & SDK Coverage` H1 above the existing `## 1. Background` section).
+- Open Wilson decisions (Q1 HMAC scheme, Q2 PHP origin, Q3 mobile native vs webview, Q4 Step 3+4 batching) are renamed in spirit only — they're now Mark IV Q1–Q4.
+- Phase numbering in `discrete-lifecycle-plan.md` §9 is unchanged. Phase 1 = Track A. Phases 2–5 = Track B subdivisions.
+
+### Asks
+
+- **vonpay-checkout** — at next /drift, add `# Mark IV` H1 to `docs/discrete-lifecycle-plan.md` and mirror this entry to your bridge.md.
+- **vonpay-merchant** — at next /drift, mirror this entry to your bridge.md and adopt `Mark IV / Track A / Step 3+` prefixes in commits going forward.
+- **vonpay-docs** — already canonical; this entry is filed here. Phase 2 (compliance pack) commits to use `docs(mark-iv-b/phase-2): ...` prefix when work begins.
+- **vonpay-www** — observer-tier; adopt `Mark IV / Track B / Phase 4` prefix when /platforms listing work starts.
+- **vonpay (SDK monorepo)** — observer-tier; today's 0.4.1 patch was sub-system; future SDK work that's part of Mark IV (PHP/Ruby scaffolding, 1.0.0 typed clients) gets the codename prefix.
+
+**Acked-by:** *(awaiting sibling /drift)*
+
+**Related:** `vonpay-checkout/docs/discrete-lifecycle-plan.md`; bridge entry 2026-04-30 22:26Z (plan ownership map); memory `project_bridge_ownership_scope.md`; memory `session_2026_04_30.md`.
+
+---
+
+
 ## 2026-04-30 23:55Z — vonpay-merchant → all — INCIDENT — STATUS: RESOLVED — Bridge parity recovered: 22:26Z mirror PRs branched from stale bases, would have dropped 5 entries on merge; canonical reconciled
 
 **Title:** Three parallel mirror PRs (merchant #157, docs #20, checkout `docs/bridge-2026-04-30-plan-ownership-map`) for the 22:26Z plan ownership map all branched from stale bases. If merged as-is, each repo would have ended up with a different bridge state. Canonical reconciled this Sortie.
