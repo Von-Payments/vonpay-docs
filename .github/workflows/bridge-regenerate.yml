@@ -1,0 +1,50 @@
+name: Bridge regenerate
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # daily at 00:00 UTC
+  workflow_dispatch:  # manual override (Wilson's /bridge-export skill)
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BRIDGE_REGEN_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install minimal deps
+        run: npm i --no-save @supabase/supabase-js@^2.45.0
+
+      - name: Regenerate bridge.md from Postgres
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/bridge-regenerate.mjs
+
+      - name: Open PR if changed
+        env:
+          GH_TOKEN: ${{ secrets.BRIDGE_REGEN_TOKEN }}
+        run: |
+          if git diff --quiet docs/bridge.md; then
+            echo "No changes — exit clean."
+            exit 0
+          fi
+          BRANCH="auto/bridge-regen-$(date -u +%Y-%m-%d)"
+          git config user.name "vonpay-bridge-bot"
+          git config user.email "bridge-bot@vonpay.com"
+          git checkout -b "$BRANCH"
+          git add docs/bridge.md
+          git commit -m "docs(bridge): auto-regen $(date -u +%Y-%m-%d)"
+          git push origin "$BRANCH" --force-with-lease
+          gh pr create --base main --head "$BRANCH" \
+            --title "docs(bridge): auto-regen $(date -u +%Y-%m-%d)" \
+            --body "Automated daily regeneration from \`bridge_events\` on vonpay-merchant Supabase. See \`scripts/bridge-regenerate.mjs\`. Auto-merge enabled." \
+            --label "auto-merge"
