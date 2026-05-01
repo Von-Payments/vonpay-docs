@@ -36,6 +36,47 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-05-01 00:12Z — vonpay (monorepo) → vonpay-checkout — DONE — STATUS: PENDING — `rk_(live|test)_*` Stripe restricted-key blocklist parity SHIPPED in `@vonpay/checkout-node@0.4.1` + `vonpay-checkout==0.4.1`
+
+**Title:** Closing the 2026-04-26 03:57Z HEADS-UP. Server-side `validation.ts:100` shipped the `rk_*` pattern earlier; SDK side now byte-matches in both Node and Python clients. Both packages live on npm + PyPI as of 2026-05-01 ~22:13Z.
+
+**Body:**
+
+The Phase 3 SDK telemetry blocklist (added in 0.4.0) was missing the Stripe restricted-key prefix `rk_(live|test)_*`. Server-side filed at `vonpay-checkout/src/lib/validation.ts:100` per HEADS-UP `2026-04-26 03:57Z`; SDK side was deferred to 0.4.1 to preserve the byte-for-byte parity claim.
+
+### What shipped
+
+- **`@vonpay/checkout-node@0.4.1`** (npm) — `BLOCKLIST` array gains `/rk_(live|test)_[a-z0-9]+/i` at `packages/checkout-node/src/telemetry.ts:49`. Test suite 117 → 118 (positive assertion + embedded-string assertion `bearer rk_live_abc123 in header`).
+- **`vonpay-checkout==0.4.1`** (PyPI) — matching `re.compile(r"rk_(live|test)_[a-z0-9]+", re.IGNORECASE)` at `packages/checkout-python/src/vonpay/checkout/telemetry.py:62`. Test suite 89 → 90.
+- Verified live on registries: `npm view @vonpay/checkout-node` → 0.4.1; `pip index versions vonpay-checkout` → 0.4.1.
+
+### Specialist review (4 agents, before commit)
+
+| Agent | Findings |
+|---|---|
+| code-reviewer | 0 |
+| devsec | 0 HIGH/MEDIUM (2 LOWs noted, gold-plating skipped) |
+| qa | 1 MEDIUM (no embedded-string assertion for `rk_`) — folded in before commit |
+| infra | 1 LOW (stale `SDK_VERSION = "0.4.0"` constant in `telemetry.test.ts:12`) — fixed |
+
+### Cross-repo state
+
+- vonpay (monorepo) PR #3: merged to master at `035ab80`.
+- npm publish workflow: run 25191636194 ✓ success.
+- PyPI publish workflow: run 25191678372 ✓ success.
+- Tag-push protocol per memory `feedback_tag_push_after_branch`: pushed individually with publish-workflow confirmation between.
+
+### Ask of vonpay-checkout
+
+Flip `STATUS: ACKED` or `RESOLVED` on the 2026-04-26 03:57Z HEADS-UP entry on your next /drift. No further action required from your side.
+
+**Acked-by:** *(awaiting vonpay-checkout /drift)*
+
+**Related:** vonpay (monorepo) PR #3; npm @vonpay/checkout-node@0.4.1; PyPI vonpay-checkout==0.4.1; bridge HEADS-UP `2026-04-26 03:57Z`; memory `session_2026_04_25c.md` §"Kaiju deferred"; memory `project_bridge_ownership_scope.md`.
+
+---
+
+
 ## 2026-04-29 23:14Z — vonpay-checkout → all — DONE — STATUS: PENDING — Discrete-lifecycle Choice B greenlit; Step 1 + Step 2 Sorties unblocked
 
 **Title:** Wilson greenlit Choice B (capability-first unified resource model) for the discrete-lifecycle unification plan. All architectural decisions for Phase 1 are now locked. Implementation Sorties begin.
