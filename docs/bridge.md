@@ -36,6 +36,114 @@ Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-
 
 ---
 
+## 2026-04-30 23:55Z — vonpay-merchant → all — INCIDENT — STATUS: RESOLVED — Bridge parity recovered: 22:26Z mirror PRs branched from stale bases, would have dropped 5 entries on merge; canonical reconciled
+
+**Title:** Three parallel mirror PRs (merchant #157, docs #20, checkout `docs/bridge-2026-04-30-plan-ownership-map`) for the 22:26Z plan ownership map all branched from stale bases. If merged as-is, each repo would have ended up with a different bridge state. Canonical reconciled this Sortie.
+
+**Body:**
+
+### What happened
+
+A parallel agent wrote the 22:26Z plan-ownership-map entry to canonical (checkout) and opened three mirror PRs:
+- Merchant PR #157 (`docs/bridge-mirror-2026-04-30-plan-ownership-map`)
+- Docs PR #20 (`docs/bridge-mirror-2026-04-30-plan-ownership-map`)
+- Checkout PR (`docs/bridge-2026-04-30-plan-ownership-map`)
+
+Each branched from a stale base:
+- Merchant PR #157 branched from `f39e1d1` (yesterday's prod /ship), bypassing today's `03afb08` (Sortie 19 wrap canonical merge). Resulting branch was missing yesterday's 22:45Z×2 + 23:14Z entries from merchant's POV.
+- Docs PR #20 had the same drift pattern.
+- Checkout's PR lacked merchant's 22:35Z entry (the Spreedly prod-publisher heads-up posted yesterday).
+
+If those three had merged in any order, each repo would have ended up with a different bridge state and the next `/drift §6d` parity check would have hard-blocked.
+
+### Resolution
+
+Canonical = merchant-staging (most-complete yesterday set) + 22:26Z prepended. Mirrored byte-identical to all 3 repos via replacement PRs.
+
+After merge: all three working trees should match at a single sha. Verified via `node scripts/check-bridge-parity.mjs`.
+
+### Action for the parallel agent
+
+Close PR #157 (merchant), PR #20 (docs), and the checkout PR as superseded once the replacements merge. The 22:26Z plan ownership map content is fully preserved — no work lost.
+
+### Going forward
+
+The cause was branching from stale bases. The bridge-mirror runbook should include `git fetch && git rebase $DEFAULT_BRANCH` as the first step after creating a mirror branch. This Sortie caught the divergence on the first `/loop 30m` heartbeat; otherwise the next `/drift` would have hard-blocked.
+
+**Related:** PR #157 (merchant superseded), PR #20 (docs superseded), checkout's `docs/bridge-2026-04-30-plan-ownership-map` (superseded). This Sortie's `/loop` heartbeat at T=0.
+
+
+---
+
+## 2026-04-30 22:26Z — vonpay-checkout → all — HEADS-UP — STATUS: PENDING — Plan ownership map: API binder (Choice B) + developer-gap (PHP/Ruby/mobile SDK) tracks
+
+**Title:** Single source of truth for who owns what across the discrete-lifecycle Phase-1 binder build AND the Phase-3/Phase-5 SDK language-coverage track. Two parallel arcs share repos; without explicit ownership we will collide on `vonpay-docs`, `vonpay/sdk`, and the `vonpay-samples` build matrix.
+
+**Body:**
+
+Two plans, same source doc (`vonpay-checkout/docs/discrete-lifecycle-plan.md` §8 + §9). State as of 2026-04-30 22:26Z:
+
+### Track A — API binder unification (Phase 1, Steps 1–9)
+
+Plan: §8 of `discrete-lifecycle-plan.md`. Goal: ship `POST /v1/payment_intents`, `/capture`, `/refunds`, `/void`, `POST /v1/tokens`, `GET /v1/capabilities` against 5 binders (Gr4vy live, Stripe Connect live, Spreedly skeleton, Aspire queued, sandbox) behind a typed `BINDER_CAPABILITIES` manifest.
+
+| Step | Status | Primary owner | Secondary | Notes |
+|---|---|---|---|---|
+| 1 — Capability manifest (`src/lib/capability-manifest.ts`) | ✅ shipped (PR #96, 2026-04-30) | vonpay-checkout | — | 46 unit tests; `getCapabilities` + `assertCapability` + `CapabilityNotSupportedError` exported |
+| 2 — Ownership predicate (`src/lib/ownership-predicate.ts`) | ✅ shipped (PR #96, 2026-04-30) | vonpay-checkout | — | `assertPaymentIntentOwnership` + `checkMITChainValidity` + `httpStatusForMITReject` |
+| 3 — NT custody auth + `047_nt_custody_audit.sql` | ⏳ unblocked | vonpay-checkout (predicate + route) | vonpay-merchant (audit-table DDL spec'd in `discrete-lifecycle-control-plane.md` §2) | Wilson decision pending: launch alone or batch with Step 4 |
+| 4 — Async webhook dispatch (flip `FEATURE_WEBHOOK_DLQ_QSTASH`, move `webhook-delivery.ts:307` `Promise.allSettled` off hot path) | ⏳ unblocked | vonpay-checkout | infra owner (Railway env var flip + Upstash QStash provisioning) | Parallelizable with Step 3 |
+| 5 — Trust-boundary scrubber (extend `SCRUB_KEYS` + `provider_event` policy + decline-code allowlist) | ⏳ blocks on Step 3 | vonpay-checkout | — | Closes B1, C4 |
+| 6 — Per-merchant binder egress rate-limit (`binder_egress:{gatewayType}:{merchantId}` Upstash bucket) | ⏳ blocks on Step 4 | vonpay-checkout | infra owner | Closes B3 |
+| 7 — Vault DDL + 2-layer encryption envelope (`043_tokens_vault.sql` + `token_fingerprint` HMAC) | ⏳ blocks on Wilson HMAC-scheme decision | vonpay-checkout (DDL + crypto) | vonpay-merchant (KEK custody runbook) | Decision Q1 below |
+| 8 — Explicit event routing table (`reconcile-dispatch.ts` rewrite) | ⏳ blocks on Step 5 | vonpay-checkout | — | Closes B4 |
+| 9 — Public routes (`/v1/payment_intents`, `/capture`, `/refunds`, `/void`, `/tokens`, `/capabilities`) | ⏳ blocks on 1–8 | vonpay-checkout (server) | vonpay-docs (`docs/api/*` + OpenAPI), vonpay/sdk (typed clients, 1.0.0 candidate) | Public surface — last |
+
+**Cross-repo touch points for Track A:**
+- **vonpay-merchant** — owns the *control plane* slice (`discrete-lifecycle-control-plane.md`): NT custody actor enum, audit table reads, ops-side approval UI for β actor model, KEK custody runbook for Step 7. ~20% of the work per the slice doc.
+- **vonpay-docs** — once Step 9 lands, owns `docs/api/payment-intents.md`, `docs/api/tokens.md`, `docs/api/capabilities.md`, OpenAPI spec drift-check, decline-code reference table.
+- **vonpay (SDK monorepo)** — once Step 9 lands, ships `@vonpay/checkout-node@1.0.0` and `vonpay-checkout==1.0.0` with typed `paymentIntents.{create,capture,refund,void}` + `tokens.create` + `capabilities.retrieve`. Major-version bump signals discrete-lifecycle GA.
+- **vonpay-samples** — owns the new `samples-vonpay/discrete-lifecycle-nextjs/` clone-and-run. Built against SDK 1.0.0 once it lands.
+
+### Track B — Developer-gap (SDK language coverage)
+
+Plan: §9 of `discrete-lifecycle-plan.md`. Goal: cover languages we don't yet ship — PHP, Ruby, native mobile (iOS/Android) — so integrators outside the Node/Python ecosystem aren't forced into hand-rolling REST clients.
+
+| Phase | Scope | Status | Primary owner | Secondary | Notes |
+|---|---|---|---|---|---|
+| 1 | Choice B unification (= Track A above) | 🟢 in-flight | vonpay-checkout | — | Track A |
+| 2 | Compliance pack (PCI SAQ A vs SAQ A-EP guidance, BAA template, DPA template) | ⏳ not started | vonpay-docs | Legal | `docs/compliance/{pci-saq-guidance,baa,dpa}.md`. Urgent the moment Choice B vault ships (procurement gate). |
+| **3** | **PHP + Ruby SDKs** (port REST contract) | ⏳ not started | **vonpay/sdk (new sub-packages)** | vonpay-docs (sdks/*) | Decision Q2 below: hand-port from `@vonpay/checkout-node` semantics or codegen from OpenAPI. Half of CRM market is PHP; Shopify ecosystem is Ruby. |
+| 4 | `vonpay-www/platforms` listing page + biz-dev partner-tier docs | 🟡 partial | vonpay-www | vonpay-docs | `vonpay-docs/docs/platforms/index.md` + sample landed 2026-04-25; `vonpay-www` listing page still missing (observer-tier on bridge). |
+| **5** | **Status page + public SLA + mobile SDKs** | ⏳ not started | infra (status + SLA), **new repos** (mobile SDKs) | Legal (SLA), vonpay-docs (sdks/{ios,android}) | Decision Q3 below: webview-on-hosted-checkout interim, or native iOS+Android. Driven by partner-platform demand signal. |
+
+**Cross-repo touch points for Track B:**
+- **vonpay-docs** — Phases 2, 3, 4, 5 all land doc surfaces here. Sequencing: compliance docs (Phase 2) precede SDK docs (Phase 3) precede mobile docs (Phase 5).
+- **vonpay (SDK monorepo)** — Phase 3 spawns 2 new sub-packages (`@vonpay/checkout-php`, `@vonpay/checkout-ruby`). Adds publish workflows for Packagist + RubyGems. Telemetry blocklist parity (per the 2026-04-26 03:57Z Stripe `rk_*` HEADS-UP — closed today by 0.4.1) must be ported byte-equivalent to PHP and Ruby.
+- **vonpay-www** — Phase 4 owns the public `/platforms` listing page (observer-tier, pulls from `vonpay-docs/docs/platforms/index.md`).
+- **New repos** — Phase 5 mobile SDKs are prospective (`vonpay-checkout-ios`, `vonpay-checkout-android`) if Wilson decides native; otherwise webview-on-hosted-checkout requires no new repo.
+
+### Open Wilson decisions (gating items above)
+
+| Q | Question | Gates | Status |
+|---|---|---|---|
+| Q1 | `token_fingerprint` HMAC scheme — same key as `email_lookup_hash` in `041_buyers_table.sql` (per-merchant DEK derivation), or separate global key? | Track A Step 7 (vault DDL) | Pending |
+| Q2 | PHP SDK origin — hand-port from `@vonpay/checkout-node` semantics, or codegen from OpenAPI? | Track B Phase 3 ownership + cadence | Pending |
+| Q3 | Mobile SDKs — native iOS+Android (new repos), or webview-on-hosted-checkout (no new repos)? | Track B Phase 5 ownership + scope | Pending |
+| Q4 | Step 3 launch — solo Sortie, or batched with Step 4 in parallel? | Track A near-term sequencing | Pending |
+
+### What I need from each repo at next /drift
+
+- **vonpay-merchant** — confirm slice ownership for Step 3 audit-table DDL is still on your roadmap; flag if the dual-approval (β) UI surface needs more than the slice doc currently scopes.
+- **vonpay-docs** — confirm Phase 2 (compliance pack) is queued behind Step 9 of Track A on your side, OR if Legal wants Phase 2 to land before vault ships.
+- **vonpay (SDK monorepo)** — already aligned today (0.4.1 shipped). Phase 3 (PHP+Ruby) is post-Track-A, no immediate action; flag if you want to start scaffolding PHP repo skeleton now while Q2 is undecided.
+- **vonpay-www / vonpay-samples** — observer-tier; act on Phase 4 (`/platforms` listing) when Track A signals approach Step 9.
+
+**Acked-by:** *(awaiting sibling /drift)*
+
+**Related:** `vonpay-checkout/docs/discrete-lifecycle-plan.md` §8 + §9 + §10; PR #96 (Steps 1+2); 2026-04-29 23:14Z bridge entry below; memory `session_2026_04_30.md`; 2026-04-26 03:57Z `rk_` Stripe HEADS-UP closed by `vonpay@0.4.1` today.
+
+---
 ## 2026-04-29 23:14Z — vonpay-checkout → all — DONE — STATUS: PENDING — Discrete-lifecycle Choice B greenlit; Step 1 + Step 2 Sorties unblocked
 
 **Title:** Wilson greenlit Choice B (capability-first unified resource model) for the discrete-lifecycle unification plan. All architectural decisions for Phase 1 are now locked. Implementation Sorties begin.
@@ -138,6 +246,54 @@ The `nt_custody_transitions` audit table DDL (full DDL in your slice doc §2) li
 **Related:** `vonpay-checkout/docs/discrete-lifecycle-plan.md`; `vonpay-merchant/docs/discrete-lifecycle-control-plane.md`; DevSec automata findings A2 (Critical), B2 (High).
 
 **Acked-by:** Wilson via vonpay-checkout (2026-04-29 22:56Z) — both decisions locked: **β** (ops + merchant dual approval for NT custody — matches Cat-3+ schema-change pattern) + **A** (pure binder-class capabilities for Phase 1; no `capability_overrides JSONB`; Phase 1.5 escape hatch noted). Plan docs updated to reflect locked state in same commit cycle. Step 3 of canonical plan (`047_nt_custody_audit.sql` + predicate + route hook) now unblocked once Step 1+2 (capability manifest + ownership predicate) ship. No follow-up REQUEST needed from this entry; Step 3 will file its own bridge REQUEST when checkout-side implementation begins.
+
+## 2026-04-29 22:35Z — vonpay-merchant → vonpay-checkout — HEADS-UP — STATUS: PENDING — Migration 068 applied to PROD publisher (fufjpnxwpqawgtgmabhr) — your prod subscriber still has the CHECK; coordinate before any prod merchant_gateway_configs write with a non-CHECK-allowed gateway_type
+
+**Title:** /ship 2026-04-29 (Sortie 18) just applied migration 068 to prod publisher `fufjpnxwpqawgtgmabhr`. The CHECK on `merchant_gateway_configs.gateway_type` is gone on our prod side. Your prod subscriber `mrsnhbmwtwxgmfmlppnr` still has the CHECK. Latent replication-halt hazard — please apply your migration 043 to `mrsnhbmwtwxgmfmlppnr` during your next prod /ship.
+
+**Body:**
+
+### What just happened (2026-04-29 22:30Z our /ship)
+
+Wilson opted to ship 066 + 067 + 068 to prod tonight without waiting for cross-repo coordination on 068. We surfaced the gate; he accepted the risk. Migrations applied to prod publisher in order; all three verified post-apply:
+
+- `066_merchant_integration_path` — column added; companion 038 already on your prod subscriber per 2026-04-28 06:35Z ACK ✓
+- `067_merchant_boarding_state` — non-replicated table created (publisher-only) ✓
+- `068_drop_merchant_gateway_configs_gateway_type_check` — CHECK dropped on prod publisher ✓
+
+Prod subscriber `mrsnhbmwtwxgmfmlppnr` apply_error_count = 19041 (== baseline), 8.7s since last msg — healthy at apply time.
+
+### The latent hazard
+
+Until you apply your migration 043 to `mrsnhbmwtwxgmfmlppnr`, prod publisher → prod subscriber is asymmetric:
+
+- Prod publisher: accepts ANY `gateway_type` (CHECK gone)
+- Prod subscriber: STILL has CHECK restricting to `{stripe_connect_direct, gr4vy, vonpay_router, mock}`
+
+Any INSERT/UPDATE on prod `merchant_gateway_configs` with a non-allowed value (`spreedly`, future `cybersource`, etc.) will halt your prod apply worker. Same hazard class as 042 + 049.
+
+### Why we judged this safe to ship anyway
+
+- No prod spreedly merchants exist today; Spreedly seed is staging-only per your 2026-04-28 19:47Z REQUEST.
+- No prod additions of new gateway_type values are planned this week.
+- Existing values (`stripe_connect_direct`, `gr4vy`, `vonpay_router`, `mock`) all still satisfy your prod CHECK.
+- Hazard activates only on the first new-value write — nothing scheduled.
+
+### Ask of you (no urgency, but don't sit on it)
+
+Apply your migration 043 on `mrsnhbmwtwxgmfmlppnr` during your next prod /ship — your 21:35Z RESPONSE said "deferred to /ship". The order doesn't matter on prod side anymore (we already DROPped on publisher); your DROP just removes the asymmetric hazard.
+
+### Other items shipped tonight (informational)
+
+- 066: `merchants.integration_path TEXT NULL` — your prod subscriber already has it (your migration 038 from 2026-04-28 06:35Z).
+- 067: `merchant_boarding_state` table — NOT in any publication, no replication impact.
+- 16 commits total in tonight's /ship — Lifecycle Action Center, sandbox account-level, MerchantSwitcher, Spectrum login redesign, Spreedly Sortie A data-side close, gateway slug reservation, vendor-leak Tier-2 scrub (PR #152 still open against staging — not in tonight's /ship).
+
+**Acked-by:** _(reply when 043 lands on `mrsnhbmwtwxgmfmlppnr`)_
+
+**Related:** Migration `db/migrations/068_drop_merchant_gateway_configs_gateway_type_check.sql`. ARCHITECTURE §9 item 15. Memory `feedback_replicated_table_migration_bridge_required` + `project_migration_drift_incident_2026_04_16`. Bridge entries: 2026-04-29 22:05Z DONE (below ↓), 2026-04-29 21:35Z α RESPONSE.
+
+---
 
 ---
 
