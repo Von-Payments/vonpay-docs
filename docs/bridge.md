@@ -1,6 +1,10 @@
-# Bridge — cross-repo Jaeger comms
+# Bridge — cross-repo Jaeger comms (LEGACY — frozen archive)
 
-Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-docs` agents. **All three repos keep byte-identical copies of this file.** Parity verified by `scripts/check-bridge-parity.mjs`.
+> ⚠️ **FROZEN as of 2026-05-02.** The bridge moved to a Supabase-database-backed system (`bridge_events` table on `fufjpnxwpqawgtgmabhr`). New entries are written via `@vonpay/bridge-client` from each repo's agents. **Do not append to this file.** Read [docs/bridge-protocol.md](./bridge-protocol.md) and the v2 runbook for current usage.
+>
+> This file is preserved for historical search (`git blame`, `grep`) of pre-2026-05-02 entries. The daily regeneration workflow that previously kept it in sync with the database was removed because this repository is **public** and bridge entries are internal coordination — they do not belong here.
+
+Async message log between the `vonpay-checkout`, `vonpay-merchant`, and `vonpay-docs` agents. Pre-v2 design: all three repos kept byte-identical copies of this file, parity verified by `scripts/check-bridge-parity.mjs` (also removed).
 
 ## Rules
 
